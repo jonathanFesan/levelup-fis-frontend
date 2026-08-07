@@ -30,7 +30,11 @@ class ModuleStrip extends StatelessWidget {
             children: [
               _ModuleBadge(
                 modulo: modulo,
-                onTap: modulo.navegavel ? () => onModuleTap(modulo) : null,
+                // Sempre repassa o toque, mesmo bloqueado — quem decide
+                // o que fazer (rolar até o módulo atual, ou mostrar a
+                // mensagem "Quase lá!") é o MapScreen, que sabe qual é
+                // o módulo aberto hoje e tem contexto pra exibir diálogo.
+                onTap: () => onModuleTap(modulo),
               ),
               if (!isLast)
                 Container(

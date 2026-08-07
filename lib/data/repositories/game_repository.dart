@@ -145,11 +145,13 @@ class GameRepository {
     int? xp,
     int? moedas,
     int? vidas,
+    String? nome,
   }) async {
     final body = <String, dynamic>{};
     if (xp != null) body['xp'] = xp;
     if (moedas != null) body['moedas'] = moedas;
     if (vidas != null) body['vidas'] = vidas;
+    if (nome != null) body['nome'] = nome;
 
     await http.patch(
       Uri.parse('$baseUrl/profile/$userId'),

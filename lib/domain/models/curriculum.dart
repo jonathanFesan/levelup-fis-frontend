@@ -19,11 +19,24 @@ class TopicoInfo {
   /// quando o tópico ganhar conteúdo real de verdade.
   final int? mockExercicios;
 
+  /// Nível GLOBAL mínimo (profiles.nivel) que o aluno precisa ter para
+  /// abrir este tópico — trava por nível, somada à trava por sequência
+  /// (tópico anterior do mesmo módulo com Fixação concluída, ver
+  /// topicoDesbloqueadoProvider em topic_progress_provider.dart). As
+  /// DUAS regras precisam valer juntas: nível mínimo E sequência
+  /// completa (decisão confirmada com o responsável do produto).
+  ///
+  /// Valores abaixo são um ponto de partida razoável para o MVP (só
+  /// Introdução e Cinemática têm conteúdo real hoje) — ajuste livremente
+  /// conforme o ritmo real dos alunos for observado.
+  final int nivelMinimo;
+
   const TopicoInfo({
     required this.id,
     required this.titulo,
     this.implementado = false,
     this.mockExercicios,
+    this.nivelMinimo = 1,
   });
 
   /// Se este tópico pode ser aberto (com conteúdo real OU em modo de
@@ -69,10 +82,14 @@ class ModuloInfo {
 /// mais tópicos/módulos, dá pra trocar isso por uma chamada de API sem
 /// mudar a UI que consome essa lista.
 ///
-/// Os 4 tópicos de Mecânica abaixo com `mockExercicios` preenchido foram
-/// liberados a pedido, SÓ PARA TESTE de navegação/UI (Módulos → Tópico →
-/// Exercícios). Não têm pergunta real nenhuma por trás — é só pra ver o
-/// fluxo completo funcionando visualmente antes do conteúdo existir.
+/// Os tópicos de Mecânica abaixo com `mockExercicios` preenchido não têm
+/// pergunta real nenhuma por trás — servem só pra ver o fluxo de
+/// navegação (Módulo → Tópico → Exercícios) antes do conteúdo existir.
+/// ATUALIZADO nesta sessão: como o app agora vai para teste real com
+/// alunos, esses tópicos de mentira deixaram de ficar liberados pra
+/// todo mundo — só aparecem navegáveis para a conta admin (ver
+/// `UserModel.isAdmin` / `topicoDesbloqueadoProvider`). Para alunos
+/// reais, eles ficam bloqueados como qualquer tópico sem conteúdo.
 const List<ModuloInfo> kCurriculo = [
   ModuloInfo(
     id: 'mecanica',
@@ -83,11 +100,32 @@ const List<ModuloInfo> kCurriculo = [
         id: 'introducao',
         titulo: 'Introdução à Física',
         implementado: true,
+        nivelMinimo: 1,
       ),
-      TopicoInfo(id: 'cinematica', titulo: 'Cinemática', implementado: true),
-      TopicoInfo(id: 'dinamica', titulo: 'Dinâmica', mockExercicios: 8),
-      TopicoInfo(id: 'estatica', titulo: 'Estática', mockExercicios: 6),
-      TopicoInfo(id: 'fluidos', titulo: 'Fluidos', mockExercicios: 7),
+      TopicoInfo(
+        id: 'cinematica',
+        titulo: 'Cinemática',
+        implementado: true,
+        nivelMinimo: 2,
+      ),
+      TopicoInfo(
+        id: 'dinamica',
+        titulo: 'Dinâmica',
+        mockExercicios: 8,
+        nivelMinimo: 3,
+      ),
+      TopicoInfo(
+        id: 'estatica',
+        titulo: 'Estática',
+        mockExercicios: 6,
+        nivelMinimo: 4,
+      ),
+      TopicoInfo(
+        id: 'fluidos',
+        titulo: 'Fluidos',
+        mockExercicios: 7,
+        nivelMinimo: 5,
+      ),
     ],
   ),
   ModuloInfo(

@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:levelup_fis/data/repositories/game_repository.dart';
 import 'package:levelup_fis/domain/models/curriculum.dart';
 import 'package:levelup_fis/domain/providers/auth_provider.dart';
+import 'package:levelup_fis/domain/providers/user_provider.dart';
 
 class TopicProgressState {
   final bool resumoConcluido;
@@ -44,17 +45,21 @@ final topicProgressProvider =
 /// `.family` funcionar de forma óbvia (mesmo padrão dos outros
 /// providers desta família).
 ///
-/// Regra: "capítulo" = cada TopicoInfo dentro de um ModuloInfo, na
-/// ordem em que aparecem em kCurriculo. Só tópicos com `implementado:
-/// true` (conteúdo real) entram na sequência de desbloqueio — o
-/// primeiro deles no módulo é sempre livre; os seguintes exigem que o
-/// anterior já tenha `fixacao_concluida == true`.
+/// REGRA ATUAL (confirmada com o responsável do produto — refinamento
+/// pré-testes reais): as DUAS condições precisam valer ao mesmo tempo
+/// para um tópico "capítulo" (implementado: true) abrir:
+///   1. Nível mínimo: profiles.nivel do aluno >= topico.nivelMinimo.
+///   2. Sequência: o tópico anterior do mesmo módulo (na ordem de
+///      kCurriculo, só contando os já implementados) precisa ter
+///      `fixacao_concluida == true`.
+/// O primeiro capítulo implementado do módulo só precisa da condição 1
+/// (não há "anterior" pra exigir sequência).
 ///
-/// Tópicos que só têm `mockExercicios` (sem `implementado`) FICAM DE
-/// FORA dessa trava de propósito — são a ferramenta de teste de UI
-/// descrita em curriculum.dart ("SÓ PARA TESTE de navegação"), não
-/// fazem parte da progressão real ainda. Travar eles removeria essa
-/// ferramenta sem ter sido pedido.
+/// Tópicos que só têm `mockExercicios` (sem `implementado`) são
+/// ferramenta de teste de UI, sem conteúdo real por trás (ver
+/// curriculum.dart) — ficam bloqueados como "Em breve" para qualquer
+/// aluno normal. Só a conta admin (profiles.is_admin) os vê navegáveis,
+/// para continuar podendo testar o fluxo de navegação.
 final topicoDesbloqueadoProvider =
     FutureProvider.family<bool, String>((ref, topicoId) async {
   TopicoInfo? topico;
@@ -73,14 +78,24 @@ final topicoDesbloqueadoProvider =
 
   if (topico == null || moduloDono == null) return true;
 
+  final isAdmin = ref.watch(userProvider).user?.isAdmin ?? false;
+
+  // Tópico sem conteúdo real (só modo de teste, ou nem isso): fora do
+  // fluxo de progressão de verdade. Só o admin pode navegar, pra testar
+  // a UI antes do conteúdo real existir.
   if (!topico.implementado) {
-    return topico.navegavel;
+    return isAdmin && topico.navegavel;
   }
+
+  if (isAdmin) return true; // admin não fica travado em nada
+
+  final nivelAtual = ref.watch(userProvider).user?.nivel ?? 1;
+  if (nivelAtual < topico.nivelMinimo) return false;
 
   final implementados =
       moduloDono.topicos.where((t) => t.implementado).toList();
   final index = implementados.indexWhere((t) => t.id == topicoId);
-  if (index <= 0) return true; // primeiro capítulo real do módulo
+  if (index <= 0) return true; // primeiro capítulo real do módulo (só nível)
 
   final anterior = implementados[index - 1];
   final progressoAnterior =

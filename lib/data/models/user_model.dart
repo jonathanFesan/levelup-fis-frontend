@@ -19,6 +19,18 @@ class UserModel {
   final int nivel;
   final DateTime? vidasAtualizadoEm;
 
+  /// Nome de exibição (ver sql/007_nome_perfil.sql). Pode ser null em
+  /// contas antigas que ainda não definiram um nome — nesse caso a UI
+  /// deve cair para um fallback (ex: prefixo do e-mail), nunca mostrar
+  /// null na tela.
+  final String? nome;
+
+  /// Reflete profiles.is_admin (ver sql/002_admin_perguntas.sql). Usado
+  /// no app só para liberar, para o admin, tópicos ainda em modo de
+  /// teste (mockExercicios) sem essa trava aparecer para alunos reais —
+  /// ver curriculum.dart e topic_progress_provider.dart.
+  final bool isAdmin;
+
   UserModel({
     required this.id,
     required this.email,
@@ -27,6 +39,8 @@ class UserModel {
     required this.vidas,
     required this.nivel,
     this.vidasAtualizadoEm,
+    this.nome,
+    this.isAdmin = false,
   });
 
   // Apelidos temáticos — ver nota no topo do arquivo.
@@ -58,6 +72,8 @@ class UserModel {
       vidasAtualizadoEm: json['vidas_atualizado_em'] != null
           ? DateTime.tryParse(json['vidas_atualizado_em'])
           : null,
+      nome: json['nome'] as String?,
+      isAdmin: json['is_admin'] ?? false,
     );
   }
 
@@ -70,6 +86,7 @@ class UserModel {
       'moedas': moedas,
       'vidas': vidas,
       'nivel': nivel,
+      'nome': nome,
     };
   }
 
@@ -80,6 +97,8 @@ class UserModel {
     int? vidas,
     int? nivel,
     DateTime? vidasAtualizadoEm,
+    String? nome,
+    bool? isAdmin,
   }) {
     return UserModel(
       id: id,
@@ -89,6 +108,17 @@ class UserModel {
       vidas: vidas ?? this.vidas,
       nivel: nivel ?? this.nivel,
       vidasAtualizadoEm: vidasAtualizadoEm ?? this.vidasAtualizadoEm,
+      nome: nome ?? this.nome,
+      isAdmin: isAdmin ?? this.isAdmin,
     );
+  }
+
+  /// Nome pronto para exibição na UI: usa [nome] se já foi definido;
+  /// senão cai para a parte antes do @ do e-mail (nunca mostra null nem
+  /// o e-mail completo, exceto como último recurso se nem e-mail houver).
+  String get nomeExibicao {
+    if (nome != null && nome!.trim().isNotEmpty) return nome!.trim();
+    if (email.contains('@')) return email.split('@').first;
+    return email.isNotEmpty ? email : 'Aluno';
   }
 }

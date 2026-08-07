@@ -160,6 +160,40 @@ class UserNotifier extends StateNotifier<UserState> {
     }
   }
 
+  /// Atualiza o nome de exibição do usuário (Item 4 do refinamento:
+  /// Perfil deve mostrar nome, não e-mail — como contas antigas não têm
+  /// nome cadastrado, a edição acontece direto na tela de Perfil em vez
+  /// de exigir recadastro). Atualiza local primeiro (feedback imediato)
+  /// e sincroniza com o backend; devolve false silenciosamente em caso
+  /// de erro de rede, mesma política de removeVida() acima.
+  Future<bool> atualizarNome(String nome) async {
+    final authState = _ref.read(authProvider);
+    if (authState.userId == null ||
+        authState.accessToken == null ||
+        state.user == null) {
+      return false;
+    }
+
+    // Guarda o UserModel inteiro (não só o nome) para poder reverter:
+    // copyWith não consegue voltar um campo para null (padrão
+    // `campo ?? this.campo`), então não dá pra reverter só o nome se o
+    // valor antigo era null — precisa restaurar o objeto inteiro.
+    final userAntigo = state.user!;
+    state = state.copyWith(user: userAntigo.copyWith(nome: nome));
+
+    try {
+      await _gameRepository.updateProfile(
+        authState.userId!,
+        authState.accessToken!,
+        nome: nome,
+      );
+      return true;
+    } catch (e) {
+      state = state.copyWith(user: userAntigo);
+      return false;
+    }
+  }
+
   /// Reflete os totais que o BACKEND já calculou (joulesTotais,
   /// fotonsTotais, nivelAtual — vindos de AnswerResultModel após
   /// responder uma questão). Não soma nada aqui — desde que

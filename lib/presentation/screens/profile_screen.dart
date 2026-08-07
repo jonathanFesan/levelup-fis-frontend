@@ -6,6 +6,7 @@ import '../../core/constants/app_constants.dart';
 import '../../domain/providers/auth_provider.dart';
 import '../../domain/providers/settings_provider.dart';
 import '../../domain/providers/user_provider.dart';
+import '../theme/app_colors.dart';
 import '../widgets/app_bottom_nav_bar.dart';
 
 /// Tela de Perfil — LevelUp Fís
@@ -13,14 +14,22 @@ import '../widgets/app_bottom_nav_bar.dart';
 /// Consome userProvider, mostra Joules, Fótons, Cargas e nível
 /// (nomenclatura temática — mesmo dado de xp/moedas/vidas por baixo,
 /// ver user_model.dart).
-/// Inclui ação de logout via authProvider e uma seção de Configurações
-/// (tema e notificações, via settingsProvider — ver esse arquivo pra
-/// entender por que essas preferências são só locais por enquanto).
 ///
-/// Nesta sessão: a seção de vídeos virou tela própria (VideosScreen,
-/// rota /videos) em vez de ficar embutida aqui — o placeholder que
-/// existia foi substituído pela seção de Configurações. A navegação
-/// entre Mapa/Vídeos/Perfil agora usa a AppBottomNavBar compartilhada.
+/// REESCRITA nesta sessão (Item 4 do refinamento pré-testes reais):
+/// - Visual agora usa AppColors (mesma paleta dark de Mapa/Vídeos) em
+///   vez do Theme.of(context) padrão do Material — a tela destoava do
+///   resto do app antes disso.
+/// - Mostra o nome de exibição do aluno (user.nomeExibicao) em vez do
+///   e-mail, com edição inline (contas antigas não têm nome cadastrado
+///   ainda — ver sql/007_nome_perfil.sql).
+/// - Configurações: os controles de Tema e Notificações não tinham
+///   efeito real nenhum no app (só salvavam uma preferência que nada
+///   lia depois — ver settings_provider.dart). Em vez de manter uma UI
+///   que parece funcionar mas não funciona, o Tema virou informativo
+///   (o app é dark-only por design hoje) e Notificações ficou marcado
+///   como "Em breve" — ambos documentados, nenhum finge fazer algo que
+///   não faz. Ver nota em settings_provider.dart pra como ligar de
+///   verdade no futuro.
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
@@ -37,22 +46,81 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     });
   }
 
+  Future<void> _editarNome() async {
+    final user = ref.read(userProvider).user;
+    if (user == null) return;
+
+    final controller = TextEditingController(
+      text: (user.nome != null && user.nome!.trim().isNotEmpty)
+          ? user.nome
+          : '',
+    );
+
+    final novoNome = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Seu nome', style: TextStyle(color: AppColors.cream)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: AppColors.cream),
+          maxLength: 40,
+          decoration: const InputDecoration(
+            hintText: 'Como podemos te chamar?',
+            hintStyle: TextStyle(color: AppColors.muted),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: AppColors.divider),
+            ),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: AppColors.gold),
+            ),
+          ),
+          onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancelar', style: TextStyle(color: AppColors.muted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('Salvar', style: TextStyle(color: AppColors.gold)),
+          ),
+        ],
+      ),
+    );
+
+    if (novoNome == null || novoNome.isEmpty || !mounted) return;
+
+    final ok = await ref.read(userProvider.notifier).atualizarNome(novoNome);
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível salvar o nome agora.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final userState = ref.watch(userProvider);
-    final authState = ref.watch(authProvider);
-    final theme = Theme.of(context);
     final user = userState.user;
 
     final xpNoNivel = (user?.xp ?? 0) % AppConstants.xpPorNivel;
     final progresso = xpNoNivel / AppConstants.xpPorNivel;
 
     return Scaffold(
+      backgroundColor: AppColors.bg,
       appBar: AppBar(
-        title: const Text('Perfil'),
+        backgroundColor: AppColors.bg,
+        elevation: 0,
+        foregroundColor: AppColors.cream,
+        title: const Text('Perfil', style: TextStyle(color: AppColors.cream)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout_rounded),
+            icon: const Icon(Icons.logout_rounded, color: AppColors.muted),
             tooltip: 'Sair',
             onPressed: () {
               ref.read(authProvider.notifier).logout();
@@ -62,7 +130,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ],
       ),
       body: userState.isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.gold),
+            )
           : userState.errorMessage != null
               ? Center(
                   child: Padding(
@@ -70,13 +140,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.error_outline,
-                            size: 48, color: theme.colorScheme.error),
+                        const Icon(Icons.error_outline,
+                            size: 48, color: AppColors.error),
                         const SizedBox(height: 12),
-                        Text(userState.errorMessage!,
-                            textAlign: TextAlign.center),
+                        Text(
+                          userState.errorMessage!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppColors.cream),
+                        ),
                         const SizedBox(height: 16),
                         FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.gold,
+                            foregroundColor: AppColors.bg,
+                          ),
                           onPressed: () =>
                               ref.read(userProvider.notifier).loadProfile(),
                           child: const Text('Tentar novamente'),
@@ -92,28 +169,51 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       Center(
                         child: Column(
                           children: [
-                            CircleAvatar(
-                              radius: 44,
-                              backgroundColor: theme.colorScheme.primaryContainer,
+                            Container(
+                              width: 88,
+                              height: 88,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(
+                                  colors: [AppColors.gold, AppColors.goldDeep],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                              ),
+                              alignment: Alignment.center,
                               child: Text(
                                 'N${user?.nivel ?? 1}',
-                                style: theme.textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: theme.colorScheme.onPrimaryContainer,
+                                style: const TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.bg,
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            Text(
-                              authState.email ?? user?.email ?? '',
-                              style: theme.textTheme.titleMedium,
+                            const SizedBox(height: 14),
+                            GestureDetector(
+                              onTap: _editarNome,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    user?.nomeExibicao ?? '',
+                                    style: const TextStyle(
+                                      color: AppColors.cream,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  const Icon(Icons.edit_rounded,
+                                      size: 16, color: AppColors.muted),
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               'Nível ${user?.nivel ?? 1}',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
+                              style: const TextStyle(color: AppColors.muted),
                             ),
                           ],
                         ),
@@ -124,16 +224,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         child: LinearProgressIndicator(
                           value: progresso.clamp(0, 1),
                           minHeight: 10,
-                          backgroundColor:
-                              theme.colorScheme.surfaceContainerHighest,
-                          color: theme.colorScheme.primary,
+                          backgroundColor: AppColors.lockedFill,
+                          color: AppColors.gold,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         '$xpNoNivel / ${AppConstants.xpPorNivel} J para o próximo nível',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                        style: const TextStyle(
+                          color: AppColors.muted,
+                          fontSize: 12,
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -142,7 +242,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           Expanded(
                             child: _StatCard(
                               icon: Icons.battery_full_rounded,
-                              color: Colors.amber.shade700,
+                              color: const Color(0xFF7FD8E8),
                               label: 'Cargas',
                               value: '${user?.cargas ?? 0}',
                             ),
@@ -151,7 +251,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           Expanded(
                             child: _StatCard(
                               icon: Icons.bolt_rounded,
-                              color: Colors.deepPurpleAccent,
+                              color: AppColors.gold,
                               label: 'Joules',
                               value: '${user?.joules ?? 0} J',
                             ),
@@ -160,7 +260,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           Expanded(
                             child: _StatCard(
                               icon: Icons.auto_awesome_rounded,
-                              color: Colors.lightBlueAccent.shade700,
+                              color: AppColors.goldDeep,
                               label: 'Fótons',
                               value: '${user?.fotons ?? 0}',
                             ),
@@ -188,6 +288,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 ),
                               );
                             },
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.gold,
+                            ),
                             icon: const Icon(Icons.add_circle_outline_rounded,
                                 size: 18),
                             label: const Text('Comprar Carga · 20 Fótons'),
@@ -195,11 +298,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         ),
                       ],
                       const SizedBox(height: 28),
-                      Text(
+                      const Text(
                         'Configurações',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                        style: TextStyle(
+                          color: AppColors.muted,
                           fontWeight: FontWeight.w700,
+                          fontSize: 13,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -226,86 +330,60 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 }
 
-/// Card de Configurações — tema e notificações.
+/// Card de Configurações — Tema e Notificações.
 ///
-/// Consome settingsProvider (preferências locais do dispositivo, ver
-/// domain/providers/settings_provider.dart). O toggle de tema aqui é só
-/// "escuro/claro/sistema" salvo localmente; a UI do app hoje usa
-/// AppColors fixo em várias telas (map_screen.dart, etc.) em vez do
-/// Theme.of(context), então um tema "claro" de verdade exigiria revisar
-/// essas telas também — fora do escopo desta sessão. Deixei o toggle
-/// funcional e persistente, mas avisando isso pro time não se surpreender
-/// se o restante do app não mudar de cor imediatamente.
+/// Tema: o app usa uma paleta escura fixa (AppColors) em todas as
+/// telas hoje — não existe tema claro implementado de verdade ainda,
+/// então em vez de expor um seletor que não muda nada visualmente,
+/// isto mostra o estado real de forma honesta.
+///
+/// Notificações: ainda não existe nenhum sistema de notificação por
+/// trás (nem local, nem push) — o toggle antigo salvava uma preferência
+/// que nada lia depois. Marcado "Em breve" até essa funcionalidade
+/// existir de verdade.
 class _SettingsCard extends ConsumerWidget {
   const _SettingsCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
-    final theme = Theme.of(context);
 
-    return Card(
-      elevation: 0,
-      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-      shape: RoundedRectangleBorder(
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.divider),
       ),
       child: Column(
         children: [
-          ListTile(
-            leading: const Icon(Icons.dark_mode_outlined),
-            title: const Text('Tema'),
-            subtitle: Text(_temaLabel(settings.themeMode)),
-            trailing: DropdownButton<ThemeMode>(
-              value: settings.themeMode,
-              underline: const SizedBox.shrink(),
-              items: const [
-                DropdownMenuItem(
-                  value: ThemeMode.dark,
-                  child: Text('Escuro'),
-                ),
-                DropdownMenuItem(
-                  value: ThemeMode.light,
-                  child: Text('Claro'),
-                ),
-                DropdownMenuItem(
-                  value: ThemeMode.system,
-                  child: Text('Sistema'),
-                ),
-              ],
-              onChanged: (mode) {
-                if (mode != null) {
-                  ref.read(settingsProvider.notifier).setThemeMode(mode);
-                }
-              },
+          const ListTile(
+            leading: Icon(Icons.dark_mode_outlined, color: AppColors.muted),
+            title: Text('Tema', style: TextStyle(color: AppColors.cream)),
+            subtitle: Text(
+              'Escuro (padrão do app, por enquanto)',
+              style: TextStyle(color: AppColors.muted),
             ),
           ),
-          const Divider(height: 1),
-          SwitchListTile(
-            secondary: const Icon(Icons.notifications_outlined),
-            title: const Text('Notificações'),
-            subtitle: const Text('Lembretes de estudo e novidades'),
-            value: settings.notificationsEnabled,
-            onChanged: (enabled) {
-              ref
-                  .read(settingsProvider.notifier)
-                  .setNotificationsEnabled(enabled);
-            },
+          const Divider(height: 1, color: AppColors.divider),
+          Opacity(
+            opacity: 0.55,
+            child: SwitchListTile(
+              secondary: const Icon(Icons.notifications_outlined,
+                  color: AppColors.muted),
+              title: const Text('Notificações',
+                  style: TextStyle(color: AppColors.cream)),
+              subtitle: const Text(
+                'Em breve — lembretes de estudo e novidades',
+                style: TextStyle(color: AppColors.muted),
+              ),
+              value: settings.notificationsEnabled,
+              activeColor: AppColors.gold,
+              onChanged: null,
+            ),
           ),
         ],
       ),
     );
-  }
-
-  String _temaLabel(ThemeMode mode) {
-    switch (mode) {
-      case ThemeMode.dark:
-        return 'Escuro';
-      case ThemeMode.light:
-        return 'Claro';
-      case ThemeMode.system:
-        return 'Sistema';
-    }
   }
 }
 
@@ -324,11 +402,10 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -337,16 +414,15 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             value,
-            style: theme.textTheme.titleMedium?.copyWith(
+            style: TextStyle(
               fontWeight: FontWeight.bold,
               color: color,
+              fontSize: 16,
             ),
           ),
           Text(
             label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+            style: const TextStyle(color: AppColors.muted, fontSize: 12),
           ),
         ],
       ),

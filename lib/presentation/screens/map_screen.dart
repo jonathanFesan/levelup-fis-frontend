@@ -72,6 +72,36 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
+  /// Mensagem exibida ao tocar em um módulo (Termologia, Ondulatória
+  /// etc.) que o aluno ainda não desbloqueou — Item 5 do refinamento.
+  void _mostrarModuloBloqueado(ModuloInfo modulo) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        icon: const Icon(Icons.lock_rounded, color: AppColors.gold, size: 32),
+        title: const Text(
+          'Quase lá!',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: AppColors.cream, fontWeight: FontWeight.w800),
+        ),
+        content: const Text(
+          'Você ainda não chegou aqui.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: AppColors.muted),
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Entendi', style: TextStyle(color: AppColors.gold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final userState = ref.watch(userProvider);
@@ -102,12 +132,21 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     onModuleTap: (modulo) {
                       if (modulo.id == currentModulo.id) {
                         _scrollToTop();
+                        return;
                       }
+                      if (modulo.navegavel) {
+                        // Outro módulo já navegável (nenhum caso disso
+                        // hoje além de Mecânica, mas deixa pronto pro
+                        // dia em que houver mais de um módulo com
+                        // conteúdo real ao mesmo tempo).
+                        return;
+                      }
+                      _mostrarModuloBloqueado(modulo);
                     },
                   ),
                 ),
                 for (final topico in currentModulo.topicos) ...[
-                  if (ref.watch(topicoDesbloqueadoProvider(topico.id)).valueOrNull ??
+                  if (ref.watch(topicoDesbloqueadoProvider(topico.id)).valueOrNull ==
                       true) ...[
                     SliverToBoxAdapter(
                       child: _TopicBanner(
