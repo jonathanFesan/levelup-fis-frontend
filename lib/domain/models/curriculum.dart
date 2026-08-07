@@ -26,9 +26,13 @@ class TopicoInfo {
   /// DUAS regras precisam valer juntas: nível mínimo E sequência
   /// completa (decisão confirmada com o responsável do produto).
   ///
-  /// Valores abaixo são um ponto de partida razoável para o MVP (só
-  /// Introdução e Cinemática têm conteúdo real hoje) — ajuste livremente
-  /// conforme o ritmo real dos alunos for observado.
+  /// ATUALIZADO nesta sessão: este valor agora é só o FALLBACK — o
+  /// admin pode sobrescrever por tópico direto no painel
+  /// (topic_content.nivel_minimo, ver sql/008_nivel_minimo_editavel.sql
+  /// e a aba Resumo do painel-perguntas.html). Se o admin nunca mexeu
+  /// nisso pra um tópico, vale o número abaixo — ajuste-o livremente
+  /// como ponto de partida, mas o jeito normal de mudar isso agora é
+  /// pelo painel, sem precisar publicar app novo.
   final int nivelMinimo;
 
   const TopicoInfo({

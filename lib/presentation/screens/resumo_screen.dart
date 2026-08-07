@@ -87,7 +87,7 @@ class _ResumoScreenState extends ConsumerState<ResumoScreen> {
   /// Corpo do card de conteúdo — trata os 3 estados possíveis do texto
   /// vindo do backend: carregando, erro de rede, e sucesso (com ou sem
   /// texto ainda salvo pelo admin no painel).
-  Widget _buildConteudo(AsyncValue<String?> conteudoAsync) {
+  Widget _buildConteudo(AsyncValue<TopicContentState> conteudoAsync) {
     return conteudoAsync.when(
       loading: () => const Padding(
         padding: EdgeInsets.all(24),
@@ -113,15 +113,16 @@ class _ResumoScreenState extends ConsumerState<ResumoScreen> {
           ],
         ),
       ),
-      data: (texto) => Padding(
+      data: (conteudo) => Padding(
         padding: const EdgeInsets.all(16),
         child: Text(
-          (texto == null || texto.trim().isEmpty)
+          (conteudo.resumoTexto == null || conteudo.resumoTexto!.trim().isEmpty)
               ? 'O conteúdo do resumo deste tópico ainda não foi cadastrado '
                   'no painel administrativo.'
-              : texto,
+              : conteudo.resumoTexto!,
           style: TextStyle(
-            color: (texto == null || texto.trim().isEmpty)
+            color: (conteudo.resumoTexto == null ||
+                    conteudo.resumoTexto!.trim().isEmpty)
                 ? AppColors.muted
                 : AppColors.textoQuaseBranco,
             height: 1.5,

@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:levelup_fis/data/repositories/game_repository.dart';
 import 'package:levelup_fis/domain/models/curriculum.dart';
 import 'package:levelup_fis/domain/providers/auth_provider.dart';
+import 'package:levelup_fis/domain/providers/topic_content_provider.dart';
 import 'package:levelup_fis/domain/providers/user_provider.dart';
 
 class TopicProgressState {
@@ -48,7 +49,10 @@ final topicProgressProvider =
 /// REGRA ATUAL (confirmada com o responsável do produto — refinamento
 /// pré-testes reais): as DUAS condições precisam valer ao mesmo tempo
 /// para um tópico "capítulo" (implementado: true) abrir:
-///   1. Nível mínimo: profiles.nivel do aluno >= topico.nivelMinimo.
+///   1. Nível mínimo: profiles.nivel do aluno >= nível mínimo do tópico
+///      (topic_content.nivel_minimo, configurável pelo painel; se o
+///      admin nunca definiu isso, cai pro padrão fixo em
+///      TopicoInfo.nivelMinimo — ver curriculum.dart).
 ///   2. Sequência: o tópico anterior do mesmo módulo (na ordem de
 ///      kCurriculo, só contando os já implementados) precisa ter
 ///      `fixacao_concluida == true`.
@@ -90,7 +94,15 @@ final topicoDesbloqueadoProvider =
   if (isAdmin) return true; // admin não fica travado em nada
 
   final nivelAtual = ref.watch(userProvider).user?.nivel ?? 1;
-  if (nivelAtual < topico.nivelMinimo) return false;
+
+  // Nível mínimo: prioriza o que o admin configurou no painel
+  // (topic_content.nivel_minimo); se ele nunca mexeu nisso pra esse
+  // tópico, cai pro valor padrão fixo em curriculum.dart — nunca fica
+  // sem nenhuma trava por causa disso.
+  final conteudo =
+      await ref.watch(topicContentProvider(topicoId).future);
+  final nivelMinimo = conteudo.nivelMinimo ?? topico.nivelMinimo;
+  if (nivelAtual < nivelMinimo) return false;
 
   final implementados =
       moduloDono.topicos.where((t) => t.implementado).toList();
