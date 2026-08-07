@@ -420,6 +420,21 @@ class _TopicMetaPath extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Progressão sequencial dentro do tópico: Resumo sempre aberto;
+    // Fixação exige Resumo concluído; Exercícios/Prova exigem Fixação
+    // concluída. Tópicos ainda sem conteúdo real (mockExercicios, só
+    // visíveis pro admin — ver curriculum.dart) ficam de fora dessa
+    // trava: não há progresso de verdade pra consultar, então os 4 nós
+    // continuam livres, só pra testar a navegação.
+    final progresso = topico.implementado
+        ? ref.watch(topicProgressProvider(topico.id)).valueOrNull
+        : null;
+
+    final fixacaoDesbloqueada =
+        !topico.implementado || (progresso?.resumoConcluido ?? false);
+    final extrasDesbloqueados =
+        !topico.implementado || (progresso?.fixacaoConcluida ?? false);
+
     return SizedBox(
       height: _containerHeight,
       child: LayoutBuilder(
@@ -466,6 +481,7 @@ class _TopicMetaPath extends ConsumerWidget {
                 child: _MetaNode(
                   icon: Icons.edit_note_rounded,
                   label: 'Fixação',
+                  locked: !fixacaoDesbloqueada,
                   onTap: () => _abrirCategoria(
                       context, 'fixacao', 'Fixação', Icons.edit_note_rounded),
                 ),
@@ -478,6 +494,7 @@ class _TopicMetaPath extends ConsumerWidget {
                   icon: Icons.bolt_rounded,
                   label: 'Exercícios',
                   optional: true,
+                  locked: !extrasDesbloqueados,
                   onTap: () => _abrirCategoria(
                       context, 'extra', 'Exercícios', Icons.bolt_rounded),
                 ),
@@ -488,6 +505,7 @@ class _TopicMetaPath extends ConsumerWidget {
                 radius: 34,
                 child: _ProvaNode(
                   topicoId: topico.id,
+                  locked: !extrasDesbloqueados,
                   onTap: () => _abrirProva(context),
                 ),
               ),
@@ -582,8 +600,13 @@ class _MetaPathPainter extends CustomPainter {
 class _ProvaNode extends ConsumerWidget {
   final String topicoId;
   final VoidCallback onTap;
+  final bool locked;
 
-  const _ProvaNode({required this.topicoId, required this.onTap});
+  const _ProvaNode({
+    required this.topicoId,
+    required this.onTap,
+    this.locked = false,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -600,8 +623,9 @@ class _ProvaNode extends ConsumerWidget {
           icon: Icons.emoji_events_rounded,
           label: 'Prova',
           onTap: onTap,
+          locked: locked,
         ),
-        if (concluida)
+        if (concluida && !locked)
           const Positioned(
             top: -2,
             right: 8,
@@ -616,28 +640,34 @@ class _ProvaNode extends ConsumerWidget {
   }
 }
 
-/// Um dos 4 nós do caminho (Resumo, Fixação, Prova, Exercícios). Todos
-/// ficam sempre "disponíveis" visualmente — não há estado de
-/// bloqueado/concluído neste nível (isso só existe dentro da trilha real
-/// de exercícios, atrás do nó Fixação). EXCEÇÃO: o nó da Prova ganhou um
-/// badge de concluído nesta sessão — ver _ProvaNode acima, que envolve
-/// este widget em vez de alterá-lo.
+/// Um dos 4 nós do caminho (Resumo, Fixação, Prova, Exercícios).
+///
+/// ATUALIZADO nesta sessão: progressão sequencial de verdade dentro do
+/// tópico — Resumo sempre aberto; Fixação só abre depois do Resumo
+/// concluído; Exercícios (opcional) e Prova só abrem depois da Fixação
+/// concluída (ver TopicProgressState em topic_progress_provider.dart).
+/// Enquanto uma etapa não está desbloqueada, o nó fica com cor apagada
+/// (`locked`) e o toque mostra uma explicação em vez de abrir a tela —
+/// nunca fica simplesmente inerte sem feedback.
 class _MetaNode extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final bool optional;
+  final bool locked;
 
   const _MetaNode({
     required this.icon,
     required this.label,
     required this.onTap,
     this.optional = false,
+    this.locked = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final size = optional ? 56.0 : 68.0;
+    final apagado = locked; // nome curto só pra deixar os ternários legíveis
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -647,27 +677,36 @@ class _MetaNode extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             customBorder: const CircleBorder(),
-            onTap: onTap,
+            onTap: apagado
+                ? () => ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content:
+                            Text('Conclua a etapa anterior para desbloquear.'),
+                      ),
+                    )
+                : onTap,
             child: Container(
               width: size,
               height: size,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: optional
+                gradient: (optional || apagado)
                     ? null
                     : const LinearGradient(
                         colors: [AppColors.gold, AppColors.goldDeep],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
-                color: optional ? AppColors.card : null,
-                border: optional
+                color: apagado
+                    ? AppColors.lockedFill
+                    : (optional ? AppColors.card : null),
+                border: (optional || apagado)
                     ? Border.all(
-                        color: AppColors.muted.withValues(alpha: 0.4),
+                        color: AppColors.muted.withValues(alpha: apagado ? 0.25 : 0.4),
                         width: 1.4,
                       )
                     : null,
-                boxShadow: optional
+                boxShadow: (optional || apagado)
                     ? null
                     : [
                         BoxShadow(
@@ -678,8 +717,8 @@ class _MetaNode extends StatelessWidget {
                       ],
               ),
               child: Icon(
-                icon,
-                color: optional ? AppColors.muted : AppColors.bg,
+                apagado ? Icons.lock_rounded : icon,
+                color: (optional || apagado) ? AppColors.muted : AppColors.bg,
                 size: optional ? 22 : 26,
               ),
             ),
@@ -689,7 +728,7 @@ class _MetaNode extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            color: optional ? AppColors.muted : AppColors.cream,
+            color: (optional || apagado) ? AppColors.muted : AppColors.cream,
             fontWeight: FontWeight.w700,
             fontSize: optional ? 11.5 : 13,
           ),

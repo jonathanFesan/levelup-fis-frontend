@@ -65,16 +65,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         content: TextField(
           controller: controller,
           autofocus: true,
+          cursorColor: AppColors.gold,
           style: const TextStyle(color: AppColors.cream),
           maxLength: 40,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: AppColors.bg,
             hintText: 'Como podemos te chamar?',
-            hintStyle: TextStyle(color: AppColors.muted),
-            enabledBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: AppColors.divider),
+            hintStyle: const TextStyle(color: AppColors.muted),
+            counterStyle: const TextStyle(color: AppColors.muted),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.divider),
             ),
-            focusedBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: AppColors.gold),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.divider),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.gold, width: 1.6),
             ),
           ),
           onSubmitted: (value) => Navigator.of(context).pop(value.trim()),

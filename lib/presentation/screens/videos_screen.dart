@@ -108,16 +108,19 @@ class _VideosScreenState extends ConsumerState<VideosScreen> {
                               onTap: _abrirVideo,
                             ),
                           ],
-                          if (videoState.aulasCompletas.isNotEmpty) ...[
+                          if (videoState.aulasCompletas
+                              .any((a) => a.desbloqueado)) ...[
                             const _SectionTitle('Aulas completas'),
                             for (final aula in videoState.aulasCompletas)
-                              _AulaCompletaTile(
-                                video: aula,
-                                onTap: () => _abrirVideo(aula),
-                              ),
+                              if (aula.desbloqueado)
+                                _AulaCompletaTile(
+                                  video: aula,
+                                  onTap: () => _abrirVideo(aula),
+                                ),
                           ],
                           if (videoState.curtas.isEmpty &&
-                              videoState.aulasCompletas.isEmpty)
+                              !videoState.aulasCompletas
+                                  .any((a) => a.desbloqueado))
                             const Padding(
                               padding: EdgeInsets.all(32),
                               child: Center(
