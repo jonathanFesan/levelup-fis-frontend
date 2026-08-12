@@ -3,12 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../domain/providers/auth_provider.dart';
+import '../theme/app_colors.dart';
 
 /// Tela de Login — LevelUp Fís
 ///
 /// Consome authProvider.login(email, senha).
 /// Em caso de sucesso (authState.isLoggedIn == true), navega para o mapa.
 /// Trata loading e erro vindos do AuthState.
+///
+/// REESCRITA nesta sessão: usava Theme.of(context) (Material padrão) em
+/// vez de AppColors, então destoava visualmente do resto do app (Mapa,
+/// Perfil, Exercício...) — mesmo bug já corrigido antes em outras telas.
+/// Como Login é a PRIMEIRA tela que qualquer pessoa vê, era o pior lugar
+/// possível pra isso acontecer.
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -53,10 +60,130 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  /// Abre um diálogo simples pedindo o e-mail e dispara
+  /// authProvider.forgotPassword() — mesmo padrão de diálogo usado em
+  /// profile_screen.dart (_editarNome), pra manter consistência visual.
+  Future<void> _handleEsqueciSenha() async {
+    final controller = TextEditingController(text: _emailController.text.trim());
+
+    final email = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Redefinir senha', style: TextStyle(color: AppColors.cream)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Informe seu e-mail — enviaremos um link pra você criar uma senha nova.',
+              style: TextStyle(color: AppColors.muted, fontSize: 13),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.emailAddress,
+              cursorColor: AppColors.gold,
+              style: const TextStyle(color: AppColors.cream),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: AppColors.bg,
+                hintText: 'seuemail@exemplo.com',
+                hintStyle: const TextStyle(color: AppColors.muted),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.divider),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.divider),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.gold, width: 1.6),
+                ),
+              ),
+              onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancelar', style: TextStyle(color: AppColors.muted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('Enviar', style: TextStyle(color: AppColors.gold)),
+          ),
+        ],
+      ),
+    );
+
+    if (email == null || email.isEmpty || !mounted) return;
+
+    if (!email.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Informe um e-mail válido.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    final erro = await ref.read(authProvider.notifier).forgotPassword(email);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          erro ?? 'Se esse e-mail estiver cadastrado, enviamos um link de redefinição de senha.',
+        ),
+        backgroundColor: erro != null ? AppColors.error : AppColors.card,
+      ),
+    );
+  }
+
+  InputDecoration _decoracaoCampo({
+    required String label,
+    required IconData icone,
+    Widget? sufixo,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: AppColors.muted),
+      prefixIcon: Icon(icone, color: AppColors.muted),
+      suffixIcon: sufixo,
+      filled: true,
+      fillColor: AppColors.card,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: AppColors.divider),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: AppColors.divider),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: AppColors.gold, width: 1.6),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: AppColors.error),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
-    final theme = Theme.of(context);
 
     // Mostra erro do backend, se houver, via SnackBar.
     ref.listen(authProvider, (previous, next) {
@@ -65,13 +192,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(next.errorMessage!),
-            backgroundColor: theme.colorScheme.error,
+            backgroundColor: AppColors.error,
           ),
         );
       }
     });
 
     return Scaffold(
+      backgroundColor: AppColors.bg,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -82,37 +210,35 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.bolt_rounded,
                     size: 72,
-                    color: theme.colorScheme.primary,
+                    color: AppColors.gold,
                   ),
                   const SizedBox(height: 12),
-                  Text(
+                  const Text(
                     'LevelUp Fís',
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineMedium?.copyWith(
+                    style: TextStyle(
+                      color: AppColors.cream,
+                      fontSize: 26,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
+                  const Text(
                     'Suba de nível em Física',
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                    style: TextStyle(color: AppColors.muted),
                   ),
                   const SizedBox(height: 40),
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'E-mail',
-                      prefixIcon: Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(16)),
-                      ),
+                    style: const TextStyle(color: AppColors.cream),
+                    decoration: _decoracaoCampo(
+                      label: 'E-mail',
+                      icone: Icons.email_outlined,
                     ),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
@@ -128,16 +254,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   TextFormField(
                     controller: _senhaController,
                     obscureText: !_senhaVisivel,
-                    decoration: InputDecoration(
-                      labelText: 'Senha',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      border: const OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(16)),
-                      ),
-                      suffixIcon: IconButton(
-                        icon: Icon(_senhaVisivel
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined),
+                    style: const TextStyle(color: AppColors.cream),
+                    decoration: _decoracaoCampo(
+                      label: 'Senha',
+                      icone: Icons.lock_outline,
+                      sufixo: IconButton(
+                        icon: Icon(
+                          _senhaVisivel
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          color: AppColors.muted,
+                        ),
                         onPressed: () =>
                             setState(() => _senhaVisivel = !_senhaVisivel),
                       ),
@@ -149,10 +276,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed:
+                          authState.isLoading ? null : _handleEsqueciSenha,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.muted,
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('Esqueceu a senha?'),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
                   FilledButton(
                     onPressed: authState.isLoading ? null : _handleLogin,
                     style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.gold,
+                      foregroundColor: AppColors.bg,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -164,16 +308,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             width: 22,
                             child: CircularProgressIndicator(
                               strokeWidth: 2.5,
-                              color: Colors.white,
+                              color: AppColors.bg,
                             ),
                           )
-                        : const Text('Entrar'),
+                        : const Text(
+                            'Entrar',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
                   ),
                   const SizedBox(height: 16),
                   TextButton(
                     onPressed: authState.isLoading
                         ? null
                         : () => context.go('/register'),
+                    style: TextButton.styleFrom(foregroundColor: AppColors.gold),
                     child: const Text('Ainda não tem conta? Cadastre-se'),
                   ),
                 ],

@@ -216,6 +216,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// Dispara o e-mail de redefinição de senha (Supabase Auth). Não mexe
+  /// no AuthState de sessão (isLoggedIn etc.) — é uma ação independente,
+  /// disparável a partir da tela de Login sem afetar o formulário.
+  /// Devolve null em caso de sucesso, ou a mensagem de erro.
+  Future<String?> forgotPassword(String email) async {
+    try {
+      await _authRepository.forgotPassword(email);
+      return null;
+    } catch (e) {
+      return e.toString().replaceAll('Exception: ', '');
+    }
+  }
+
   /// Realiza o logout
   void logout() {
     _limparSessaoSalva();

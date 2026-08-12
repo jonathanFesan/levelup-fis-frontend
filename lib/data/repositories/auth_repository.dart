@@ -60,4 +60,20 @@ class AuthRepository {
       throw Exception(data['detail'] ?? 'Sessão expirada.');
     }
   }
+
+  /// Pede pro backend disparar o e-mail de redefinição de senha via
+  /// Supabase Auth. O backend sempre devolve 200 (mesmo se o e-mail não
+  /// existir), então erro aqui só acontece por falha de rede/servidor.
+  Future<void> forgotPassword(String email) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/forgot-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email}),
+    );
+
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw Exception(data['detail'] ?? 'Não foi possível enviar o e-mail agora.');
+    }
+  }
 }
