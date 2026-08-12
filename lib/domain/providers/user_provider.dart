@@ -14,7 +14,6 @@
 // resposta (pode vir com Cargas recarregadas desde a última checagem).
 // Também ganhou buyCharge() — comprar 1 Carga de emergência com Fótons.
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:levelup_fis/core/constants/app_constants.dart';
 import 'package:levelup_fis/data/models/user_model.dart';
@@ -52,14 +51,21 @@ class UserNotifier extends StateNotifier<UserState> {
 
   UserNotifier(this._gameRepository, this._ref) : super(UserState());
 
-  /// Carrega o perfil do usuário logado
+  /// Carrega o perfil do usuário logado.
+  ///
+  /// BUG CORRIGIDO: se o token salvo ainda é válido (não expirou) mas a
+  /// conta por trás dele foi apagada direto no Supabase (fora do app —
+  /// ex: durante um reset manual de teste), o app ficava "logado" só
+  /// que quebrado: Mapa/Perfil mostrando erro pra sempre, sem jeito de
+  /// sair dali a não ser apagando o app. Agora, especificamente pra
+  /// ProfileNotFoundException (backend devolveu 404 — ver
+  /// game_repository.dart/getProfile e o 404 real em
+  /// backend/app/routes/progress.py), trata isso como sessão inválida e
+  /// força logout, voltando pra tela de Login — mesmo tratamento que
+  /// authProvider já dá quando o refresh_token expira de verdade.
   Future<void> loadProfile() async {
     final authState = _ref.read(authProvider);
     if (authState.userId == null || authState.accessToken == null) return;
-
-    // DIAGNÓSTICO TEMPORÁRIO — confirma exatamente o que está sendo
-    // enviado na URL /profile/{user_id}.
-    debugPrint('[loadProfile] userId enviado: "${authState.userId}"');
 
     state = state.copyWith(isLoading: true);
     try {
@@ -68,9 +74,9 @@ class UserNotifier extends StateNotifier<UserState> {
         authState.accessToken!,
       );
       state = state.copyWith(isLoading: false, user: user);
+    } on ProfileNotFoundException {
+      _ref.read(authProvider.notifier).logout();
     } catch (e) {
-      // DIAGNÓSTICO TEMPORÁRIO — remover depois de achar a causa raiz.
-      debugPrint('[loadProfile] erro real: $e');
       state = state.copyWith(
         isLoading: false,
         errorMessage: 'Erro ao carregar perfil.',

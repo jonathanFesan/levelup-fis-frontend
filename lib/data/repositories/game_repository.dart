@@ -24,6 +24,16 @@ import 'package:levelup_fis/data/models/user_model.dart';
 import 'package:levelup_fis/data/models/video_model.dart';
 import 'package:levelup_fis/data/models/curriculo_model.dart';
 
+/// Sessão válida (token não expirado), mas o perfil por trás dela não
+/// existe mais no banco — ex: a conta foi apagada direto no Supabase
+/// (fora do app) enquanto o token salvo localmente ainda não expirou.
+/// Sinal específico (em vez de Exception genérica) pra quem chama poder
+/// tratar isso como sessão inválida e forçar logout — ver
+/// user_provider.dart.loadProfile.
+class ProfileNotFoundException implements Exception {
+  const ProfileNotFoundException();
+}
+
 class GameRepository {
   final String baseUrl = AppConstants.baseUrl;
 
@@ -85,6 +95,8 @@ class GameRepository {
 
     if (response.statusCode == 200) {
       return UserModel.fromJson(jsonDecode(response.body));
+    } else if (response.statusCode == 404) {
+      throw const ProfileNotFoundException();
     } else {
       // DIAGNÓSTICO TEMPORÁRIO — inclui status e corpo da resposta.
       throw Exception(
