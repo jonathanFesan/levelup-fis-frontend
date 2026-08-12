@@ -28,6 +28,7 @@ List<ModuloInfo> _paraModuloInfo(List<AreaModel> areas) {
               titulo: b.titulo,
               implementado: true,
               nivelMinimo: b.nivelMinimo,
+              capitulos: b.capitulos,
             ))
         .toList();
 

@@ -2,17 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/models/curriculo_model.dart';
 import '../../domain/models/curriculum.dart';
+import '../../domain/providers/capitulo_progress_provider.dart';
 import '../../domain/providers/curriculo_provider.dart';
 import '../../domain/providers/exam_provider.dart';
 import '../../domain/providers/topic_progress_provider.dart';
 import '../../domain/providers/user_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_bottom_nav_bar.dart';
-import '../widgets/exercise_trail.dart' show TrailStarfield;
+import '../widgets/exercise_trail.dart';
 import '../widgets/module_strip.dart';
+import 'curiosidade_screen.dart';
 import 'exam_stats_screen.dart';
-import 'placeholder_section_screen.dart';
 import 'resumo_screen.dart';
 import 'topic_exercises_screen.dart';
 
@@ -20,27 +22,23 @@ import 'topic_exercises_screen.dart';
 /// página rolável, tópico por tópico.
 ///
 /// Para cada tópico: um banner (módulo pequeno/discreto + tópico grande,
-/// estilo "Seção X, Unidade Y") seguido de um caminho com 4 nós:
+/// estilo "Seção X, Unidade Y") seguido de uma trilha SEQUENCIAL — os
+/// Capítulos do Bloco (Resumo, Curiosidade(s), Fixação, Prova — nessa
+/// ou em qualquer outra ordem definida pelo painel), um atrás do outro,
+/// cada um travando o próximo até ser concluído, cada tipo com seu
+/// próprio ícone (ver _iconeCapitulo). O único que fica FORA dessa
+/// sequência é o Capítulo tipo 'extra' (Exercícios): um selo pequeno,
+/// sem curva/cometa, ANEXADO ao canto inferior direito do nó de
+/// Fixação — ver TrailNode.sideBadge em widgets/exercise_trail.dart e
+/// _buildTopicPathSlivers.
 ///
-/// ```
-///        (Resumo)
-///           |
-///   (Fixação) - - (Exercícios)   <- ramificação opcional, ao lado
-///           |
-///        (Prova)
-/// ```
-///
-/// - Resumo e Prova final ainda não têm design definido: abrem uma
-///   pré-visualização genérica (PlaceholderSectionScreen).
-/// - Fixação abre a trilha de exercícios de verdade daquele tópico
-///   (TopicExercisesScreen) — para Cinemática isso já é real, vindo do
-///   Supabase; para os demais tópicos de Mecânica é pré-visualização
-///   (ver TopicoInfo.mockExercicios em curriculum.dart). É esse o ponto
-///   que precisa ser conferido conforme mais tópicos ganharem perguntas
-///   reais no backend.
-/// - Exercícios (o caminho opcional) ainda não tem conteúdo/design
-///   definido nenhum: abre a mesma pré-visualização genérica de
-///   Resumo/Prova, por enquanto.
+/// FASE 2 DO CURRÍCULO DINÂMICO: antes disso, o caminho era um desenho
+/// fixo de 4 nós com curvas feitas à mão (só Resumo→Fixação→Prova,
+/// Exercícios ao lado) — não dava pra encaixar Curiosidade NO MEIO do
+/// caminho nesse esquema. Trocado pela mesma trilha vertical sequencial
+/// já usada dentro de cada Capítulo de exercícios (ExerciseTrail, ver
+/// widgets/exercise_trail.dart), que já sabe lidar com qualquer
+/// quantidade de nós.
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
 
@@ -226,12 +224,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               topico: topico,
             ),
           ),
-          SliverToBoxAdapter(
-            child: _TopicMetaPath(
-              modulo: currentModulo,
-              topico: topico,
-            ),
-          ),
+          ..._buildTopicPathSlivers(currentModulo, topico),
         ] else
           SliverToBoxAdapter(
             child: _TopicoBloqueadoCard(
@@ -241,6 +234,190 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           ),
       ],
     ];
+  }
+
+  /// Monta a trilha sequencial de um tópico: todos os Capítulos exceto
+  /// 'extra', na ordem definida pelo painel (`ordem`), cada um travando
+  /// o próximo até ser concluído — mesma mecânica de sempre (Resumo,
+  /// Fixação) estendida a Curiosidade (ver
+  /// capitulo_progress_provider.dart) e Prova (via examAttemptsProvider,
+  /// concluída = pelo menos uma tentativa finalizada). 'extra'
+  /// (Exercícios) é o único que fica de fora, como ramificação opcional
+  /// abaixo — sempre existiu como opcional, só mudou de posição visual.
+  List<Widget> _buildTopicPathSlivers(ModuloInfo modulo, TopicoInfo topico) {
+    final progresso = ref.watch(topicProgressProvider(topico.id)).valueOrNull;
+    final capProgresso =
+        ref.watch(capituloProgressProvider(topico.id)).valueOrNull ?? {};
+    final tentativasAsync = ref.watch(examAttemptsProvider(topico.id));
+    final provaConcluida = tentativasAsync.maybeWhen(
+      data: (tentativas) => tentativas.any((t) => t.finalizada),
+      orElse: () => false,
+    );
+
+    bool concluidoDoTipo(CapituloModel c) {
+      switch (c.tipo) {
+        case 'resumo':
+          return progresso?.resumoConcluido ?? false;
+        case 'fixacao':
+          return progresso?.fixacaoConcluida ?? false;
+        case 'prova':
+          return provaConcluida;
+        case 'curiosidade':
+          return capProgresso[c.id] ?? false;
+        default:
+          return false;
+      }
+    }
+
+    final sequencia = [
+      ...topico.capitulos.where((c) => c.tipo != 'extra'),
+    ]..sort((a, b) => a.ordem.compareTo(b.ordem));
+
+    // Exercícios (extra) não faz parte da sequência principal — vira um
+    // selo pequeno ANEXADO ao nó de Fixação (canto inferior direito),
+    // sem curva/cometa ligando a ele. Só existe se o Bloco tiver um
+    // Capítulo tipo 'extra' cadastrado no painel (aba Currículo — se não
+    // aparecer aqui, é porque esse Capítulo ainda não foi criado lá).
+    final extraCapitulo = topico.capituloDoTipo('extra');
+    final extraDesbloqueado = progresso?.fixacaoConcluida ?? false;
+
+    final slivers = <Widget>[];
+
+    if (sequencia.isEmpty) {
+      // Bloco recém-criado pelo painel, ainda sem nenhum Capítulo
+      // cadastrado — não deveria acontecer com Blocos migrados pela
+      // 011_capitulos_livres.sql, mas evita uma tela em branco.
+      slivers.add(
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.divider),
+              ),
+              child: const Text(
+                'O conteúdo deste tópico ainda está sendo preparado.',
+                style: TextStyle(color: AppColors.muted),
+              ),
+            ),
+          ),
+        ),
+      );
+    } else {
+      final nodes = [
+        for (var i = 0; i < sequencia.length; i++)
+          TrailNode(
+            titulo: sequencia[i].titulo,
+            desbloqueado: i == 0 || concluidoDoTipo(sequencia[i - 1]),
+            concluido: concluidoDoTipo(sequencia[i]),
+            icon: _iconeCapitulo(sequencia[i].tipo),
+            sideBadge: (sequencia[i].tipo == 'fixacao' && extraCapitulo != null)
+                ? TrailSideBadge(
+                    icon: _iconeCapitulo('extra'),
+                    desbloqueado: extraDesbloqueado,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => TopicExercisesScreen(
+                          modulo: modulo,
+                          topico: topico,
+                          categoria: 'extra',
+                          tituloCapitulo: extraCapitulo.titulo,
+                        ),
+                      ),
+                    ),
+                    onTapBloqueado: () => ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Conclua a Fixação para desbloquear.'),
+                      ),
+                    ),
+                  )
+                : null,
+          ),
+      ];
+      slivers.add(
+        ExerciseTrail(
+          nodes: nodes,
+          onNodeTap: (i) => _abrirCapitulo(modulo, topico, sequencia[i]),
+        ),
+      );
+    }
+
+    return slivers;
+  }
+
+  /// Ícone de cada tipo de Capítulo, usado tanto nos nós da sequência
+  /// principal quanto no selo de Exercícios extra.
+  IconData _iconeCapitulo(String tipo) {
+    switch (tipo) {
+      case 'resumo':
+        return Icons.menu_book_rounded;
+      case 'fixacao':
+        return Icons.edit_note_rounded;
+      case 'prova':
+        return Icons.emoji_events_rounded;
+      case 'curiosidade':
+        return Icons.lightbulb_outline_rounded;
+      case 'extra':
+        // "+" — Exercícios extra é conteúdo A MAIS, fora da sequência
+        // principal (ver o selo anexado ao nó de Fixação, abaixo).
+        return Icons.add_circle_rounded;
+      default:
+        return Icons.circle_outlined;
+    }
+  }
+
+  void _abrirCapitulo(
+    ModuloInfo modulo,
+    TopicoInfo topico,
+    CapituloModel capitulo,
+  ) {
+    switch (capitulo.tipo) {
+      case 'resumo':
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ResumoScreen(modulo: modulo, topico: topico),
+          ),
+        );
+        break;
+      case 'fixacao':
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => TopicExercisesScreen(
+              modulo: modulo,
+              topico: topico,
+              categoria: 'fixacao',
+              tituloCapitulo: capitulo.titulo,
+            ),
+          ),
+        );
+        break;
+      case 'prova':
+        // Sempre pela tela de Estatísticas, mesmo sem nenhuma tentativa
+        // ainda (ela já lida com isso) — evita ExamScreen ser aberta às
+        // vezes direto do mapa, às vezes via estatísticas, o que fazia a
+        // tela de resultado não saber pra onde voltar (ver
+        // exam_screen.dart).
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ExamStatsScreen(modulo: modulo, topico: topico),
+          ),
+        );
+        break;
+      case 'curiosidade':
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => CuriosidadeScreen(
+              modulo: modulo,
+              topico: topico,
+              capitulo: capitulo,
+            ),
+          ),
+        );
+        break;
+    }
   }
 }
 
@@ -375,421 +552,6 @@ class _TopicoBloqueadoCard extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _TopicMetaPath extends ConsumerWidget {
-  final ModuloInfo modulo;
-  final TopicoInfo topico;
-
-  const _TopicMetaPath({required this.modulo, required this.topico});
-
-  // Deslocamentos horizontais (a partir do centro) e verticais (a partir
-  // do topo) de cada nó — mesma unidade usada pelo _MetaPathPainter pra
-  // desenhar as curvas exatamente até esses pontos.
-  static const double _fixacaoOffsetX = -55;
-  static const double _exerciciosOffsetX = 78;
-  static const double _resumoY = 40;
-  static const double _fixacaoRowY = 170;
-  static const double _provaY = 300;
-  static const double _nodeColumnWidth = 100;
-  static const double _containerHeight = 372;
-
-  void _abrirPlaceholder(BuildContext context, String secao, IconData icon) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => PlaceholderSectionScreen(
-          moduloTitulo: modulo.titulo,
-          topicoTitulo: topico.titulo,
-          secaoTitulo: secao,
-          icon: icon,
-        ),
-      ),
-    );
-  }
-
-  /// Abre a trilha real de exercícios pra [categoria] ('fixacao', 'extra'
-  /// ou 'prova') se o tópico já tiver conteúdo implementado; caso
-  /// contrário, cai no placeholder genérico — não faz sentido abrir uma
-  /// trilha "de mentira" pra Prova/Exercícios extras de um tópico que
-  /// ainda nem tem Fixação real.
-  void _abrirCategoria(
-    BuildContext context,
-    String categoria,
-    String secaoTitulo,
-    IconData icon,
-  ) {
-    if (topico.implementado) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => TopicExercisesScreen(
-            modulo: modulo,
-            topico: topico,
-            categoria: categoria,
-          ),
-        ),
-      );
-    } else {
-      _abrirPlaceholder(context, secaoTitulo, icon);
-    }
-  }
-
-  /// Abre o Resumo — tela real (com o bônus de +10 J idempotente) pra
-  /// tópicos implementados; placeholder genérico pros demais, igual
-  /// já era feito pra Prova/Exercícios não implementados.
-  void _abrirResumo(BuildContext context) {
-    if (!topico.implementado) {
-      _abrirPlaceholder(context, 'Resumo', Icons.menu_book_rounded);
-      return;
-    }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ResumoScreen(modulo: modulo, topico: topico),
-      ),
-    );
-  }
-
-  /// Abre a Prova — sempre pela tela de Estatísticas, mesmo se ainda não
-  /// tiver nenhuma tentativa (ela já lida com isso: mostra "nenhuma
-  /// tentativa ainda" + botão "Tentar novamente"). Unificar a entrada
-  /// assim evita ExamScreen ser aberta às vezes direto do mapa, às vezes
-  /// via estatísticas — o que causava a tela de resultado não saber pra
-  /// onde voltar depois de finalizar (ver exam_screen.dart).
-  void _abrirProva(BuildContext context) {
-    if (!topico.implementado) {
-      _abrirPlaceholder(context, 'Prova final', Icons.emoji_events_rounded);
-      return;
-    }
-
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ExamStatsScreen(modulo: modulo, topico: topico),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Progressão sequencial dentro do tópico: Resumo sempre aberto;
-    // Fixação exige Resumo concluído; Exercícios/Prova exigem Fixação
-    // concluída. Tópicos ainda sem conteúdo real (mockExercicios, só
-    // visíveis pro admin — ver curriculum.dart) ficam de fora dessa
-    // trava: não há progresso de verdade pra consultar, então os 4 nós
-    // continuam livres, só pra testar a navegação.
-    final progresso = topico.implementado
-        ? ref.watch(topicProgressProvider(topico.id)).valueOrNull
-        : null;
-
-    final fixacaoDesbloqueada =
-        !topico.implementado || (progresso?.resumoConcluido ?? false);
-    final extrasDesbloqueados =
-        !topico.implementado || (progresso?.fixacaoConcluida ?? false);
-
-    return SizedBox(
-      height: _containerHeight,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final centerX = constraints.maxWidth / 2;
-
-          Widget positionedNode({
-            required double x,
-            required double y,
-            required double radius,
-            required Widget child,
-          }) {
-            return Positioned(
-              left: x - _nodeColumnWidth / 2,
-              top: y - radius,
-              width: _nodeColumnWidth,
-              child: child,
-            );
-          }
-
-          return Stack(
-            clipBehavior: Clip.none,
-            children: [
-              // Curvas desenhadas atrás dos nós.
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: _MetaPathPainter(centerX: centerX),
-                ),
-              ),
-              positionedNode(
-                x: centerX,
-                y: _resumoY,
-                radius: 34,
-                child: _MetaNode(
-                  icon: Icons.menu_book_rounded,
-                  label: 'Resumo',
-                  onTap: () => _abrirResumo(context),
-                ),
-              ),
-              positionedNode(
-                x: centerX + _fixacaoOffsetX,
-                y: _fixacaoRowY,
-                radius: 34,
-                child: _MetaNode(
-                  icon: Icons.edit_note_rounded,
-                  label: 'Fixação',
-                  locked: !fixacaoDesbloqueada,
-                  onTap: () => _abrirCategoria(
-                      context, 'fixacao', 'Fixação', Icons.edit_note_rounded),
-                ),
-              ),
-              positionedNode(
-                x: centerX + _exerciciosOffsetX,
-                y: _fixacaoRowY,
-                radius: 28,
-                child: _MetaNode(
-                  icon: Icons.bolt_rounded,
-                  label: 'Exercícios',
-                  optional: true,
-                  locked: !extrasDesbloqueados,
-                  onTap: () => _abrirCategoria(
-                      context, 'extra', 'Exercícios', Icons.bolt_rounded),
-                ),
-              ),
-              positionedNode(
-                x: centerX,
-                y: _provaY,
-                radius: 34,
-                child: _ProvaNode(
-                  topicoId: topico.id,
-                  locked: !extrasDesbloqueados,
-                  onTap: () => _abrirProva(context),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// Desenha as 3 curvas do mini-caminho: Resumo→Fixação e Fixação→Prova
-/// como S-curves verticais (igual à trilha principal), e Fixação→
-/// Exercícios como um arco suave lateral — nunca uma linha reta.
-class _MetaPathPainter extends CustomPainter {
-  final double centerX;
-
-  _MetaPathPainter({required this.centerX});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final fixacaoX = centerX + _TopicMetaPath._fixacaoOffsetX;
-    final exerciciosX = centerX + _TopicMetaPath._exerciciosOffsetX;
-    const resumoY = _TopicMetaPath._resumoY;
-    const rowY = _TopicMetaPath._fixacaoRowY;
-    const provaY = _TopicMetaPath._provaY;
-
-    final mainPaint = Paint()
-      ..color = AppColors.gold.withValues(alpha: 0.55)
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    final branchPaint = Paint()
-      ..color = AppColors.muted.withValues(alpha: 0.45)
-      ..strokeWidth = 2.5
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    // Resumo -> Fixação: S-curve vertical.
-    _drawDashed(
-      canvas,
-      mainPaint,
-      Path()
-        ..moveTo(centerX, resumoY)
-        ..cubicTo(centerX, (resumoY + rowY) / 2, fixacaoX,
-            (resumoY + rowY) / 2, fixacaoX, rowY),
-    );
-
-    // Fixação -> Prova: S-curve vertical, simétrica à anterior.
-    _drawDashed(
-      canvas,
-      mainPaint,
-      Path()
-        ..moveTo(fixacaoX, rowY)
-        ..cubicTo(fixacaoX, (rowY + provaY) / 2, centerX,
-            (rowY + provaY) / 2, centerX, provaY),
-    );
-
-    // Fixação -> Exercícios: arco suave lateral (ramificação opcional).
-    _drawDashed(
-      canvas,
-      branchPaint,
-      Path()
-        ..moveTo(fixacaoX, rowY)
-        ..cubicTo(fixacaoX + 45, rowY + 30, exerciciosX - 45, rowY + 30,
-            exerciciosX, rowY),
-    );
-  }
-
-  void _drawDashed(Canvas canvas, Paint paint, Path path) {
-    const dashWidth = 7.0;
-    const dashGap = 6.0;
-    for (final metric in path.computeMetrics()) {
-      double distance = 0;
-      while (distance < metric.length) {
-        final next = (distance + dashWidth).clamp(0.0, metric.length);
-        canvas.drawPath(metric.extractPath(distance, next), paint);
-        distance = next + dashGap;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _MetaPathPainter oldDelegate) =>
-      oldDelegate.centerX != centerX;
-}
-
-/// Envolve o _MetaNode da Prova com um badge de check dourado no canto
-/// quando o tópico já tem pelo menos uma tentativa concluída (consulta
-/// examAttemptsProvider, com cache do próprio Riverpod — não refaz a
-/// chamada toda hora que o mapa reconstrói).
-class _ProvaNode extends ConsumerWidget {
-  final String topicoId;
-  final VoidCallback onTap;
-  final bool locked;
-
-  const _ProvaNode({
-    required this.topicoId,
-    required this.onTap,
-    this.locked = false,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tentativasAsync = ref.watch(examAttemptsProvider(topicoId));
-    final concluida = tentativasAsync.maybeWhen(
-      data: (tentativas) => tentativas.any((t) => t.finalizada),
-      orElse: () => false,
-    );
-
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        _MetaNode(
-          icon: Icons.emoji_events_rounded,
-          label: 'Prova',
-          onTap: onTap,
-          locked: locked,
-        ),
-        if (concluida && !locked)
-          const Positioned(
-            top: -2,
-            right: 8,
-            child: CircleAvatar(
-              radius: 11,
-              backgroundColor: AppColors.success,
-              child: Icon(Icons.check_rounded, size: 14, color: AppColors.bg),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// Um dos 4 nós do caminho (Resumo, Fixação, Prova, Exercícios).
-///
-/// ATUALIZADO nesta sessão: progressão sequencial de verdade dentro do
-/// tópico — Resumo sempre aberto; Fixação só abre depois do Resumo
-/// concluído; Exercícios (opcional) e Prova só abrem depois da Fixação
-/// concluída (ver TopicProgressState em topic_progress_provider.dart).
-/// Enquanto uma etapa não está desbloqueada, o nó fica com cor apagada
-/// (`locked`) e o toque mostra uma explicação em vez de abrir a tela —
-/// nunca fica simplesmente inerte sem feedback.
-class _MetaNode extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool optional;
-  final bool locked;
-
-  const _MetaNode({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.optional = false,
-    this.locked = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final size = optional ? 56.0 : 68.0;
-    final apagado = locked; // nome curto só pra deixar os ternários legíveis
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Material(
-          shape: const CircleBorder(),
-          color: Colors.transparent,
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: apagado
-                ? () => ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content:
-                            Text('Conclua a etapa anterior para desbloquear.'),
-                      ),
-                    )
-                : onTap,
-            child: Container(
-              width: size,
-              height: size,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: (optional || apagado)
-                    ? null
-                    : const LinearGradient(
-                        colors: [AppColors.gold, AppColors.goldDeep],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                color: apagado
-                    ? AppColors.lockedFill
-                    : (optional ? AppColors.card : null),
-                border: (optional || apagado)
-                    ? Border.all(
-                        color: AppColors.muted.withValues(alpha: apagado ? 0.25 : 0.4),
-                        width: 1.4,
-                      )
-                    : null,
-                boxShadow: (optional || apagado)
-                    ? null
-                    : [
-                        BoxShadow(
-                          color: AppColors.gold.withValues(alpha: 0.35),
-                          blurRadius: 12,
-                          offset: const Offset(0, 5),
-                        ),
-                      ],
-              ),
-              child: Icon(
-                apagado ? Icons.lock_rounded : icon,
-                color: (optional || apagado) ? AppColors.muted : AppColors.bg,
-                size: optional ? 22 : 26,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          label,
-          style: TextStyle(
-            color: (optional || apagado) ? AppColors.muted : AppColors.cream,
-            fontWeight: FontWeight.w700,
-            fontSize: optional ? 11.5 : 13,
-          ),
-        ),
-        if (optional)
-          const Text(
-            'opcional',
-            style: TextStyle(color: AppColors.muted, fontSize: 9.5),
-          ),
-      ],
     );
   }
 }

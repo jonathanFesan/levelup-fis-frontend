@@ -59,11 +59,17 @@ class TopicExercisesScreen extends ConsumerStatefulWidget {
   final TopicoInfo topico;
   final String categoria;
 
+  /// Título editável pelo painel (Capítulo correspondente a [categoria]
+  /// — ver curriculum.dart/TopicoInfo.capituloDoTipo), usado no
+  /// cabeçalho no lugar do rótulo fixo de _categorias quando disponível.
+  final String? tituloCapitulo;
+
   const TopicExercisesScreen({
     super.key,
     required this.modulo,
     required this.topico,
     this.categoria = 'fixacao',
+    this.tituloCapitulo,
   });
 
   @override
@@ -105,7 +111,7 @@ class _TopicExercisesScreenState extends ConsumerState<TopicExercisesScreen> {
                   child: _Header(
                     modulo: modulo,
                     topico: topico,
-                    label: _info.label,
+                    label: widget.tituloCapitulo?.toUpperCase() ?? _info.label,
                   ),
                 ),
                 if (topico.implementado)

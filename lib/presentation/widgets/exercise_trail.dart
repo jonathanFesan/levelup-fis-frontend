@@ -12,10 +12,46 @@ class TrailNode {
   final bool desbloqueado;
   final bool concluido;
 
+  /// Ícone mostrado no nó enquanto ele está desbloqueado e ainda não
+  /// concluído (o estado "atual"). Se nulo, cai no ícone genérico de
+  /// sempre (play_arrow) — usado pelas trilhas de pergunta individual,
+  /// que não têm um ícone por nó. Nó bloqueado sempre mostra cadeado;
+  /// concluído sempre mostra check — [icon] não muda esses dois estados.
+  final IconData? icon;
+
+  /// Selo pequeno, ancorado no canto inferior direito do nó, pra uma
+  /// ramificação OPCIONAL que não faz parte da sequência principal —
+  /// hoje só o Capítulo "Exercícios" (extra) usa isto, anexado ao nó de
+  /// Fixação. Diferente dos nós da sequência, não tem curva/cometa
+  /// ligando ele a nada (ver map_screen.dart).
+  final TrailSideBadge? sideBadge;
+
   const TrailNode({
     required this.titulo,
     required this.desbloqueado,
     required this.concluido,
+    this.icon,
+    this.sideBadge,
+  });
+}
+
+/// Selo satélite de um [TrailNode] — botão menor, sem conexão visual com
+/// a trilha principal (ver doc de [TrailNode.sideBadge]).
+class TrailSideBadge {
+  final IconData icon;
+  final bool desbloqueado;
+  final VoidCallback onTap;
+
+  /// Chamado no lugar de [onTap] quando [desbloqueado] é false — em vez
+  /// de o toque simplesmente não fazer nada, dá feedback do motivo
+  /// (mesma filosofia dos nós principais).
+  final VoidCallback? onTapBloqueado;
+
+  const TrailSideBadge({
+    required this.icon,
+    required this.desbloqueado,
+    required this.onTap,
+    this.onTapBloqueado,
   });
 }
 
@@ -451,6 +487,41 @@ class _TrailNodeTileState extends State<_TrailNodeTile>
       );
     }
 
+    // Selo satélite (ex: Exercícios extra) — separado do círculo
+    // principal, no canto inferior direito, SEM curva/cometa ligando a
+    // ele. Aplicado depois do glow, pra não distorcer o brilho (que fica
+    // só ao redor do círculo principal).
+    //
+    // IMPORTANTE: o Stack precisa de um tamanho EXPLÍCITO grande o
+    // bastante pra cobrir o selo — um Stack comum só herda o tamanho
+    // dos filhos NÃO-Positioned (aqui, só o círculo, 72x72), e qualquer
+    // Positioned que ultrapasse esse tamanho fica visível (Clip.none)
+    // mas NÃO recebe toque: o hit-test de qualquer RenderBox para antes
+    // de entrar nos filhos se o ponto cair fora do próprio `size` da
+    // caixa. Por isso o círculo fica centralizado (Align) dentro dessa
+    // caixa maior, em vez de Positioned(right: valor negativo) — assim
+    // ele continua exatamente no mesmo lugar de sempre (a Column por
+    // fora sempre centraliza pelo maior filho, então alargar esta caixa
+    // não desloca o círculo em relação à curva/cometa).
+    if (node.sideBadge != null) {
+      const largura = 72.0 + 128.0;
+      circle = SizedBox(
+        width: largura,
+        height: 72,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Align(alignment: Alignment.center, child: circle),
+            Positioned(
+              right: 10,
+              bottom: -4,
+              child: _TrailSideBadgeButton(badge: node.sideBadge!),
+            ),
+          ],
+        ),
+      );
+    }
+
     final tile = Align(
       alignment: Alignment.topCenter,
       child: Transform.translate(
@@ -552,8 +623,8 @@ class _TrailNodeCircle extends StatelessWidget {
                 end: Alignment.bottomRight,
               ),
             ),
-            child: const Icon(
-              Icons.play_arrow_rounded,
+            child: Icon(
+              node.icon ?? Icons.play_arrow_rounded,
               color: AppColors.bg,
               size: 30,
             ),
@@ -574,6 +645,56 @@ class _TrailNodeCircle extends StatelessWidget {
         Icons.lock_rounded,
         color: AppColors.muted,
         size: 24,
+      ),
+    );
+  }
+}
+
+/// Botão menor do [TrailSideBadge] — ícone próprio, sem curva/cometa,
+/// ancorado no canto do nó principal (ver _TrailNodeTileState.build).
+class _TrailSideBadgeButton extends StatelessWidget {
+  final TrailSideBadge badge;
+
+  const _TrailSideBadgeButton({required this.badge});
+
+  @override
+  Widget build(BuildContext context) {
+    const size = 38.0;
+
+    return Material(
+      shape: const CircleBorder(),
+      color: Colors.transparent,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: badge.desbloqueado ? badge.onTap : badge.onTapBloqueado,
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: badge.desbloqueado ? AppColors.card : AppColors.lockedFill,
+            border: Border.all(
+              color: badge.desbloqueado
+                  ? AppColors.gold.withValues(alpha: 0.6)
+                  : AppColors.divider,
+              width: 1.6,
+            ),
+            boxShadow: badge.desbloqueado
+                ? [
+                    BoxShadow(
+                      color: AppColors.bg.withValues(alpha: 0.4),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Icon(
+            badge.desbloqueado ? badge.icon : Icons.lock_rounded,
+            color: badge.desbloqueado ? AppColors.gold : AppColors.muted,
+            size: 18,
+          ),
+        ),
       ),
     );
   }

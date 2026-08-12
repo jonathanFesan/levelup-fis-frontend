@@ -18,10 +18,30 @@
 // quem via o app. `mockExercicios` continua existindo em TopicoInfo como
 // ferramenta genérica de teste visual, só que sem nenhum bloco hardcoded
 // usando ela hoje.
+//
+// FASE 2 DO CURRÍCULO DINÂMICO: TopicoInfo.capitulos reaproveita
+// CapituloModel direto de data/models/curriculo_model.dart em vez de ter
+// uma classe de domínio equivalente — não há nenhuma transformação real
+// entre o JSON e o que a UI consome aqui, então duplicar a classe só pra
+// respeitar a separação de camadas seria abstração sem propósito.
+
+import 'package:levelup_fis/data/models/curriculo_model.dart';
 
 class TopicoInfo {
   final String id;
   final String titulo;
+
+  /// Capítulos deste Bloco (Resumo/Fixação/Exercícios/Prova/Curiosidade),
+  /// na ordem definida pelo painel — ver
+  /// backend/sql/011_capitulos_livres.sql. A sequência principal da
+  /// trilha (todo tipo exceto 'extra') é montada a partir desta lista em
+  /// map_screen.dart._buildTopicPathSlivers, cada Capítulo travando o
+  /// próximo até ser concluído — Resumo/Fixação via
+  /// topic_progress_provider.dart (como sempre foi), Curiosidade via
+  /// capitulo_progress_provider.dart (novo, ver
+  /// sql/012_capitulo_progress.sql). 'extra' (Exercícios) é o único que
+  /// fica de fora dessa sequência, como ramificação opcional.
+  final List<CapituloModel> capitulos;
 
   /// Se já existe conteúdo real (questões cadastradas no backend) para
   /// este tópico. Hoje: `introducao` e `cinematica`, ambos vindos da API.
@@ -57,11 +77,24 @@ class TopicoInfo {
     this.implementado = false,
     this.mockExercicios,
     this.nivelMinimo = 1,
+    this.capitulos = const [],
   });
 
   /// Se este tópico pode ser aberto (com conteúdo real OU em modo de
   /// teste/preview).
   bool get navegavel => implementado || mockExercicios != null;
+
+  /// Primeiro Capítulo de [tipo] ('resumo', 'fixacao', 'extra', 'prova')
+  /// — usado só pra pegar o TÍTULO editável pelo painel; se não houver
+  /// nenhum (tópico ainda não migrado, ou modo de teste/preview), quem
+  /// chama cai pro rótulo padrão de sempre. Se houver mais de um
+  /// Capítulo do mesmo tipo, usa o de menor `ordem` (já vem ordenado).
+  CapituloModel? capituloDoTipo(String tipo) {
+    for (final c in capitulos) {
+      if (c.tipo == tipo) return c;
+    }
+    return null;
+  }
 }
 
 /// Um "bloco grande" do currículo (ex: Mecânica, Termologia...).

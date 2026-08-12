@@ -128,16 +128,33 @@ class GameRepository {
     }
   }
 
-  /// Cria o perfil após o cadastro
+  /// Cria o perfil após o cadastro.
+  ///
+  /// BUG CORRIGIDO: esta chamada nunca checava `response.statusCode` —
+  /// se a criação falhasse no backend (RLS bloqueando o INSERT, erro de
+  /// rede, etc.), o cadastro seguia em frente como se tivesse dado
+  /// certo: sessão salva, usuário "logado", mas SEM NENHUMA linha em
+  /// `profiles`. O app então quebrava silenciosamente em cascata (perfil
+  /// não carrega, nível cai pro padrão 1, tópicos com nível mínimo maior
+  /// ficam travados) sem nenhum erro visível na hora do cadastro, que é
+  /// quando dava pra avisar e pra tentar de novo. Também passa a
+  /// escapar `userId`/`email` na URL — sem isso, um e-mail com "+"
+  /// (comum, ex: "nome+teste@gmail.com") virava espaço no query string.
   Future<void> createProfile(
     String userId,
     String email,
     String accessToken,
   ) async {
-    await http.post(
-      Uri.parse('$baseUrl/profile/create?user_id=$userId&email=$email'),
-      headers: _authHeaders(accessToken),
+    final uri = Uri.parse('$baseUrl/profile/create').replace(
+      queryParameters: {'user_id': userId, 'email': email},
     );
+    final response = await http.post(uri, headers: _authHeaders(accessToken));
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Erro ao criar perfil. status=${response.statusCode} body=${response.body}',
+      );
+    }
   }
 
   /// Atualiza XP e moedas após acerto
@@ -331,6 +348,45 @@ class GameRepository {
     } else {
       throw Exception(
         'Erro ao marcar resumo como concluído. status=${response.statusCode} body=${response.body}',
+      );
+    }
+  }
+
+  /// Progresso do usuário nos Capítulos de [topico] — mapa
+  /// {capitulo_id: concluido}, hoje só relevante pra Capítulos tipo
+  /// 'curiosidade' (ver sql/012_capitulo_progress.sql).
+  Future<Map<String, dynamic>> getCapituloProgress(
+    String accessToken, {
+    required String topico,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/capitulo-progress/$topico'),
+      headers: _authHeaders(accessToken),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } else {
+      throw Exception(
+        'Erro ao buscar progresso de capítulos. status=${response.statusCode} body=${response.body}',
+      );
+    }
+  }
+
+  /// Marca um Capítulo (hoje: só 'curiosidade') como concluído — é isso
+  /// que libera o próximo passo da sequência no Mapa.
+  Future<void> concluirCapitulo(
+    String accessToken, {
+    required int capituloId,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/capitulo-progress/$capituloId/concluir'),
+      headers: _authHeaders(accessToken),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Erro ao concluir capítulo. status=${response.statusCode} body=${response.body}',
       );
     }
   }

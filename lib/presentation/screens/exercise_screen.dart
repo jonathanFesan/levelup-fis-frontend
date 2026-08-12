@@ -10,6 +10,7 @@ import '../../domain/models/curriculum.dart';
 import '../../domain/providers/auth_provider.dart';
 import '../../domain/providers/curriculo_provider.dart';
 import '../../domain/providers/game_path_provider.dart';
+import '../../domain/providers/topic_progress_provider.dart';
 import '../../domain/providers/user_provider.dart';
 import '../theme/app_colors.dart';
 import 'result_screen.dart';
@@ -154,6 +155,19 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
               nivel: resultado.nivelAtual,
             );
         ref.read(gamePathProvider.notifier).completeNode(widget.nodeIndex);
+
+        // BUG CORRIGIDO: quando esta resposta completa a Fixação
+        // (capituloDesbloqueado == true), o backend já marca
+        // topic_progress.fixacao_concluida = true — mas o Mapa lê esse
+        // estado de topicProgressProvider, que o Riverpod mantém em
+        // cache. Sem invalidar aqui, o Mapa continuava mostrando a
+        // Prova (e Exercícios extra) travados até o app ser fechado e
+        // reaberto, mesmo já liberados no servidor. Invalidando na hora
+        // exata em que o desbloqueio acontece, a trilha atualiza assim
+        // que o aluno volta pro Mapa — sem esperar reabrir o app.
+        if (resultado.capituloDesbloqueado) {
+          ref.invalidate(topicProgressProvider(question.topico));
+        }
       } else {
         await ref.read(userProvider.notifier).removeVida();
       }

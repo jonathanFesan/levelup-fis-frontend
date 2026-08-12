@@ -2,10 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
 
 import '../../data/repositories/game_repository.dart';
 import '../../domain/models/curriculum.dart';
@@ -14,6 +11,7 @@ import '../../domain/providers/topic_content_provider.dart';
 import '../../domain/providers/topic_progress_provider.dart';
 import '../../domain/providers/user_provider.dart';
 import '../theme/app_colors.dart';
+import '../widgets/pdf_viewer.dart';
 
 /// Canal nativo mínimo (implementado direto em MainActivity.kt, sem
 /// pacote de terceiro) pra ligar/desligar FLAG_SECURE no Android
@@ -173,7 +171,7 @@ class _ResumoScreenState extends ConsumerState<ResumoScreen> {
         final temPdf = conteudo.resumoPdfUrl != null &&
             conteudo.resumoPdfUrl!.trim().isNotEmpty;
         if (temPdf) {
-          return _PdfViewer(url: conteudo.resumoPdfUrl!.trim());
+          return PdfViewer(url: conteudo.resumoPdfUrl!.trim());
         }
         return SingleChildScrollView(
           child: Padding(
@@ -318,103 +316,6 @@ class _ResumoScreenState extends ConsumerState<ResumoScreen> {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Baixa o PDF de [url] pra um arquivo temporário e mostra com
-/// flutter_pdfview (zoom por pinça nativo da plataforma, sem nenhum
-/// botão de compartilhar/imprimir nosso). Cada instância baixa uma vez
-/// só (cache em memória via _futuroArquivo, criado em initState) — abrir
-/// e fechar a tela de novo baixa de novo, o que é aceitável pro
-/// tamanho normal de um PDF de resumo.
-class _PdfViewer extends StatefulWidget {
-  final String url;
-
-  const _PdfViewer({required this.url});
-
-  @override
-  State<_PdfViewer> createState() => _PdfViewerState();
-}
-
-class _PdfViewerState extends State<_PdfViewer> {
-  late Future<String> _futuroArquivo;
-
-  @override
-  void initState() {
-    super.initState();
-    _futuroArquivo = _baixarPdf(widget.url);
-  }
-
-  @override
-  void didUpdateWidget(covariant _PdfViewer oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.url != widget.url) {
-      _futuroArquivo = _baixarPdf(widget.url);
-    }
-  }
-
-  Future<String> _baixarPdf(String url) async {
-    final resposta = await http.get(Uri.parse(url));
-    if (resposta.statusCode != 200) {
-      throw Exception(
-        'Não foi possível baixar o PDF (status ${resposta.statusCode}). '
-        'Confira se o link está com o compartilhamento público ativado.',
-      );
-    }
-    final pastaTemp = await getTemporaryDirectory();
-    // Nome de arquivo baseado no hash da URL, pra não colidir entre
-    // tópicos diferentes abertos na mesma sessão do app.
-    final arquivo = File(
-      '${pastaTemp.path}/resumo_${url.hashCode}.pdf',
-    );
-    await arquivo.writeAsBytes(resposta.bodyBytes, flush: true);
-    return arquivo.path;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<String>(
-      future: _futuroArquivo,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(
-            child: CircularProgressIndicator(color: AppColors.gold),
-          );
-        }
-        if (snapshot.hasError) {
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  snapshot.error.toString().replaceFirst('Exception: ', ''),
-                  style: const TextStyle(color: AppColors.muted),
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () => setState(() {
-                    _futuroArquivo = _baixarPdf(widget.url);
-                  }),
-                  child: const Text('Tentar novamente'),
-                ),
-              ],
-            ),
-          );
-        }
-        return PDFView(
-          filePath: snapshot.data!,
-          enableSwipe: true,
-          swipeHorizontal: false,
-          autoSpacing: true,
-          pageFling: true,
-          pageSnap: false,
-          fitPolicy: FitPolicy.WIDTH,
-          backgroundColor: AppColors.card,
-        );
-      },
     );
   }
 }
