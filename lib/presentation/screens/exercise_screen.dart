@@ -8,6 +8,7 @@ import '../../data/models/progress_model.dart';
 import '../../data/repositories/game_repository.dart';
 import '../../domain/models/curriculum.dart';
 import '../../domain/providers/auth_provider.dart';
+import '../../domain/providers/curriculo_provider.dart';
 import '../../domain/providers/game_path_provider.dart';
 import '../../domain/providers/user_provider.dart';
 import '../theme/app_colors.dart';
@@ -84,12 +85,14 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
   }
 
   /// Busca o [ModuloInfo] (ex: "Mecânica") dono do tópico da questão
-  /// atual, olhando o currículo estático — é dali que vem tanto o título
-  /// quanto o símbolo (ícone/customIconBuilder) do módulo, o mesmo usado
-  /// no Mapa (ModuleStrip). Se não encontrar (tópico fora do currículo
-  /// declarado, ex: mock antigo), retorna null.
-  ModuloInfo? _moduloDoTopico(String topicoId) {
-    for (final modulo in kCurriculo) {
+  /// atual, olhando o currículo já carregado por curriculoProvider — é
+  /// dali que vem tanto o título quanto o símbolo (emoji) do módulo, o
+  /// mesmo usado no Mapa (ModuleStrip). Se não encontrar (currículo ainda
+  /// carregando, com erro, ou tópico fora dele — ex: mock antigo),
+  /// retorna null; a UI já trata esse caso mostrando só o título do
+  /// tópico, sem símbolo.
+  ModuloInfo? _moduloDoTopico(List<ModuloInfo> modulos, String topicoId) {
+    for (final modulo in modulos) {
       if (modulo.topicos.any((t) => t.id == topicoId)) {
         return modulo;
       }
@@ -97,8 +100,8 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
     return null;
   }
 
-  String _tituloTopico(String topicoId) {
-    for (final modulo in kCurriculo) {
+  String _tituloTopico(List<ModuloInfo> modulos, String topicoId) {
+    for (final modulo in modulos) {
       for (final topico in modulo.topicos) {
         if (topico.id == topicoId) return topico.titulo;
       }
@@ -201,10 +204,11 @@ class _ExerciseScreenState extends ConsumerState<ExerciseScreen> {
     final node = pathState.nodes[widget.nodeIndex];
     final question = node.question;
     final userVidas = ref.watch(userProvider).user?.cargas ?? 0;
+    final modulos = ref.watch(curriculoProvider).valueOrNull ?? [];
 
-    final modulo = _moduloDoTopico(question.topico);
+    final modulo = _moduloDoTopico(modulos, question.topico);
     final moduloTitulo = modulo?.titulo ?? '';
-    final topicoTitulo = _tituloTopico(question.topico);
+    final topicoTitulo = _tituloTopico(modulos, question.topico);
     final localizacao =
         moduloTitulo.isEmpty ? topicoTitulo : '$moduloTitulo · $topicoTitulo';
 
@@ -401,12 +405,10 @@ class _OpcaoLetrada {
   const _OpcaoLetrada({required this.letra, required this.texto});
 }
 
-/// Selo circular com o símbolo do módulo atual — o mesmo `icon` ou
-/// `customIconBuilder` definido em [ModuloInfo] (curriculum.dart), que é
-/// exatamente o que a ModuleStrip desenha no Mapa. Fica centralizado no
-/// topo, como referência discreta de "em que módulo você está" — por
-/// isso usa tons neutros/muted, sem disputar destaque com os corações
-/// nem com o cronômetro.
+/// Selo circular com o símbolo do módulo atual — o mesmo `emoji` definido
+/// em [ModuloInfo] (curriculum.dart), que é exatamente o que a
+/// ModuleStrip desenha no Mapa. Fica centralizado no topo, como
+/// referência discreta de "em que módulo você está".
 class _ModuloSymbol extends StatelessWidget {
   final ModuloInfo modulo;
 
@@ -415,8 +417,6 @@ class _ModuloSymbol extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const size = 26.0;
-    const iconSize = 14.0;
-    final corIcone = AppColors.muted.withValues(alpha: 0.8);
 
     return Container(
       width: size,
@@ -426,11 +426,10 @@ class _ModuloSymbol extends StatelessWidget {
         shape: BoxShape.circle,
         color: AppColors.card.withValues(alpha: 0.6),
       ),
-      child: modulo.icon != null
-          ? Icon(modulo.icon, color: corIcone, size: iconSize)
-          : modulo.customIconBuilder != null
-              ? modulo.customIconBuilder!(corIcone, iconSize)
-              : null,
+      child: Opacity(
+        opacity: 0.8,
+        child: Text(modulo.emoji, style: const TextStyle(fontSize: 13, height: 1)),
+      ),
     );
   }
 }

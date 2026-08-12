@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../domain/models/curriculum.dart';
+import '../../domain/providers/curriculo_provider.dart';
 import '../../domain/providers/exam_provider.dart';
 import '../../domain/providers/topic_progress_provider.dart';
 import '../../domain/providers/user_provider.dart';
@@ -105,9 +106,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   @override
   Widget build(BuildContext context) {
     final userState = ref.watch(userProvider);
-
-    // O Mapa mostra o módulo Mecânica inteiro (único com conteúdo hoje).
-    final currentModulo = kCurriculo.firstWhere((m) => m.id == 'mecanica');
+    final curriculoAsync = ref.watch(curriculoProvider);
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -127,47 +126,40 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     onProfileTap: () => context.go('/profile'),
                   ),
                 ),
-                SliverToBoxAdapter(
-                  child: ModuleStrip(
-                    onModuleTap: (modulo) {
-                      if (modulo.id == currentModulo.id) {
-                        _scrollToTop();
-                        return;
-                      }
-                      if (modulo.navegavel) {
-                        // Outro módulo já navegável (nenhum caso disso
-                        // hoje além de Mecânica, mas deixa pronto pro
-                        // dia em que houver mais de um módulo com
-                        // conteúdo real ao mesmo tempo).
-                        return;
-                      }
-                      _mostrarModuloBloqueado(modulo);
-                    },
-                  ),
+                ...curriculoAsync.when(
+                  loading: () => const [
+                    SliverFillRemaining(
+                      child: Center(
+                        child: CircularProgressIndicator(color: AppColors.gold),
+                      ),
+                    ),
+                  ],
+                  error: (e, _) => [
+                    SliverFillRemaining(
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                'Erro ao carregar o currículo.',
+                                style: TextStyle(color: AppColors.cream),
+                              ),
+                              const SizedBox(height: 12),
+                              FilledButton(
+                                onPressed: () =>
+                                    ref.invalidate(curriculoProvider),
+                                child: const Text('Tentar novamente'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  data: (modulos) => _buildCurriculoSlivers(modulos),
                 ),
-                for (final topico in currentModulo.topicos) ...[
-                  if (ref.watch(topicoDesbloqueadoProvider(topico.id)).valueOrNull ==
-                      true) ...[
-                    SliverToBoxAdapter(
-                      child: _TopicBanner(
-                        modulo: currentModulo,
-                        topico: topico,
-                      ),
-                    ),
-                    SliverToBoxAdapter(
-                      child: _TopicMetaPath(
-                        modulo: currentModulo,
-                        topico: topico,
-                      ),
-                    ),
-                  ] else
-                    SliverToBoxAdapter(
-                      child: _TopicoBloqueadoCard(
-                        modulo: currentModulo,
-                        topico: topico,
-                      ),
-                    ),
-                ],
                 const SliverToBoxAdapter(child: SizedBox(height: 24)),
               ],
             ),
@@ -191,6 +183,64 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         },
       ),
     );
+  }
+
+  /// Monta a faixa de módulos + a lista de tópicos do módulo Mecânica
+  /// (único com conteúdo hoje) a partir do currículo já carregado.
+  List<Widget> _buildCurriculoSlivers(List<ModuloInfo> modulos) {
+    final currentModulo = modulos.firstWhere(
+      (m) => m.id == 'mecanica',
+      orElse: () => const ModuloInfo(
+        id: 'mecanica',
+        titulo: 'Mecânica',
+        emoji: '⚙️',
+        topicos: [],
+      ),
+    );
+
+    return [
+      SliverToBoxAdapter(
+        child: ModuleStrip(
+          modulos: modulos,
+          onModuleTap: (modulo) {
+            if (modulo.id == currentModulo.id) {
+              _scrollToTop();
+              return;
+            }
+            if (modulo.navegavel) {
+              // Outro módulo já navegável (nenhum caso disso hoje além
+              // de Mecânica, mas deixa pronto pro dia em que houver
+              // mais de um módulo com conteúdo real ao mesmo tempo).
+              return;
+            }
+            _mostrarModuloBloqueado(modulo);
+          },
+        ),
+      ),
+      for (final topico in currentModulo.topicos) ...[
+        if (ref.watch(topicoDesbloqueadoProvider(topico.id)).valueOrNull ==
+            true) ...[
+          SliverToBoxAdapter(
+            child: _TopicBanner(
+              modulo: currentModulo,
+              topico: topico,
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: _TopicMetaPath(
+              modulo: currentModulo,
+              topico: topico,
+            ),
+          ),
+        ] else
+          SliverToBoxAdapter(
+            child: _TopicoBloqueadoCard(
+              modulo: currentModulo,
+              topico: topico,
+            ),
+          ),
+      ],
+    ];
   }
 }
 
@@ -266,7 +316,8 @@ class _TopicBanner extends StatelessWidget {
 /// nós ficam quanto onde a curva passa.
 /// Mostrado no lugar do banner + mini-caminho de um tópico quando ele
 /// ainda está bloqueado — o capítulo anterior do módulo (mesmo
-/// ModuloInfo, ordem de kCurriculo) ainda não teve a Fixação concluída.
+/// ModuloInfo, ordem vinda de curriculoProvider) ainda não teve a
+/// Fixação concluída.
 /// Ver topicoDesbloqueadoProvider em topic_progress_provider.dart pra
 /// regra completa (só tópicos com implementado=true entram nessa
 /// sequência — os de mockExercicios continuam livres, são ferramenta

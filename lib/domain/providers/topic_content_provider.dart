@@ -16,6 +16,11 @@ import 'package:levelup_fis/domain/providers/auth_provider.dart';
 class TopicContentState {
   final String? resumoTexto;
 
+  /// Link de um PDF já hospedado em outro lugar (Google Drive, etc.).
+  /// Quando preenchido, a tela de Resumo mostra o PDF em vez do texto
+  /// — ver sql/009_resumo_pdf.sql e resumo_screen.dart.
+  final String? resumoPdfUrl;
+
   /// Nível global mínimo definido pelo admin no painel. Null se o
   /// admin nunca configurou isso pra esse tópico — nesse caso, quem
   /// consome este provider deve cair pro valor padrão do próprio app
@@ -23,7 +28,7 @@ class TopicContentState {
   /// como "sem trava nenhuma".
   final int? nivelMinimo;
 
-  TopicContentState({this.resumoTexto, this.nivelMinimo});
+  TopicContentState({this.resumoTexto, this.resumoPdfUrl, this.nivelMinimo});
 }
 
 /// `resumoTexto` vem null se o admin ainda não salvou nada pra esse
@@ -36,6 +41,7 @@ final topicContentProvider =
   final json = await repository.getTopicContent(accessToken, topico: topico);
   return TopicContentState(
     resumoTexto: json['resumo_texto'] as String?,
+    resumoPdfUrl: json['resumo_pdf_url'] as String?,
     nivelMinimo: json['nivel_minimo'] as int?,
   );
 });

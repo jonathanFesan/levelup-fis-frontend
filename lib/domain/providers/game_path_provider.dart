@@ -112,16 +112,16 @@ class GamePathNotifier extends StateNotifier<GamePathState> {
   ///
   /// IMPORTANTE: se o [topico]+[categoria] pedidos já são os mesmos que
   /// geraram os nós atuais (`state.loadedTopico`/`loadedCategoria`), a
-  /// busca é PULADA por padrão. Isso existe porque o backend ainda não
-  /// persiste progresso por aluno (user_progress) — o único lugar onde
-  /// "nó concluído / próximo desbloqueado" existe é aqui, em memória,
-  /// setado por [completeNode]. Buscar de novo na API sempre devolve os
-  /// nós no estado inicial (só o primeiro desbloqueado, nada concluído),
-  /// o que apagava o progresso feito na sessão toda vez que o aluno
-  /// saía e voltava para a mesma trilha (ex: Mapa → Tópico → Fixação de
-  /// novo). Use [forceReload] quando realmente precisar buscar de novo
-  /// (ex: botão "Tentar novamente" após erro, ou ao trocar de
-  /// tópico/categoria — isso já é detectado automaticamente).
+  /// busca é PULADA por padrão — evita um round-trip desnecessário à API
+  /// toda vez que o aluno volta pra mesma trilha na mesma sessão (ex:
+  /// Mapa → Tópico → Fixação de novo). O backend já persiste
+  /// `concluido`/`desbloqueado` de verdade (via user_progress, ver
+  /// respondidaCorretamente em question_model.dart), então mesmo um
+  /// reload completo reconstrói a trilha certa — mas pular a busca
+  /// quando nada mudou continua sendo mais rápido. Use [forceReload]
+  /// quando realmente precisar buscar de novo (ex: botão "Tentar
+  /// novamente" após erro, ou ao trocar de tópico/categoria — isso já é
+  /// detectado automaticamente).
   Future<void> loadGamePath({
     String topico = 'cinematica',
     String categoria = 'fixacao',
@@ -148,23 +148,46 @@ class GamePathNotifier extends StateNotifier<GamePathState> {
         categoria: categoria,
       );
 
-      // Converte questões em nós do mapa
-      // Apenas o primeiro nó começa desbloqueado
+      // Converte questões em nós do mapa.
+      //
+      // BUG CRÍTICO CORRIGIDO: antes, todo nó nascia com concluido=false
+      // e só o primeiro desbloqueado=true, não importa o que o aluno já
+      // tivesse feito antes — isso apagava visualmente o progresso de
+      // quem já tinha respondido certo sempre que a trilha precisava
+      // ser buscada de novo (app reaberto do zero, processo morto em
+      // segundo plano, forceReload). Agora usa
+      // question.respondidaCorretamente (que já vem persistido do
+      // backend, cruzando com user_progress) pra marcar `concluido` de
+      // verdade, e desbloqueia cada nó cujo anterior já foi concluído
+      // — não só o primeiro da lista.
       final nodes = questions.asMap().entries.map((entry) {
         final index = entry.key;
         final question = entry.value;
+        final concluido = question.respondidaCorretamente;
+        final desbloqueado = index == 0 ||
+            questions[index - 1].respondidaCorretamente ||
+            concluido;
         return MapNode(
           ordem: index + 1,
           titulo: 'Fase ${index + 1}',
           question: question,
-          desbloqueado: index == 0, // só o primeiro desbloqueado
-          concluido: false,
+          desbloqueado: desbloqueado,
+          concluido: concluido,
         );
       }).toList();
+
+      // currentNodeIndex começa no primeiro nó ainda não concluído (ou
+      // no último, se tudo já foi respondido certo) — assim quem volta
+      // pra uma trilha já em andamento continua de onde parou, em vez
+      // de sempre cair no início.
+      final primeiroNaoConcluido = nodes.indexWhere((n) => !n.concluido);
+      final currentNodeIndex =
+          primeiroNaoConcluido == -1 ? nodes.length - 1 : primeiroNaoConcluido;
 
       state = state.copyWith(
         isLoading: false,
         nodes: nodes,
+        currentNodeIndex: currentNodeIndex,
         loadedTopico: topico,
         loadedCategoria: categoria,
       );

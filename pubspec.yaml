@@ -35,6 +35,16 @@ dependencies:
   # ativos.
   connectivity_plus: ^6.1.0
 
+  # Visualizador de PDF do Resumo (Item: Resumo em PDF, com zoom nativo
+  # e sem opção de impressão) — renderiza a partir de um arquivo local,
+  # por isso baixamos o PDF pra um arquivo temporário antes de abrir
+  # (ver resumo_screen.dart).
+  flutter_pdfview: ^1.3.2
+
+  # Pasta temporária do dispositivo, usada pra salvar o PDF baixado
+  # antes de abrir no flutter_pdfview.
+  path_provider: ^2.1.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

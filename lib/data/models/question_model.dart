@@ -10,6 +10,12 @@ class QuestionModel {
   final int dificuldade;
   final int ordem;
 
+  /// Se o aluno JÁ acertou essa questão antes (vem do backend, cruzando
+  /// com user_progress) — é o que permite reconstruir a trilha sem
+  /// perder o progresso quando o app é reaberto do zero ou o tópico é
+  /// recarregado (ver game_path_provider.dart).
+  final bool respondidaCorretamente;
+
   QuestionModel({
     required this.id,
     required this.topico,
@@ -18,6 +24,7 @@ class QuestionModel {
     this.opcoes,
     required this.dificuldade,
     required this.ordem,
+    this.respondidaCorretamente = false,
   });
 
   factory QuestionModel.fromJson(Map<String, dynamic> json) {
@@ -35,6 +42,7 @@ class QuestionModel {
       opcoes: opcoesList,
       dificuldade: json['dificuldade'] ?? 1,
       ordem: json['ordem'] ?? 1,
+      respondidaCorretamente: json['respondida_corretamente'] ?? false,
     );
   }
 }

@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:levelup_fis/data/repositories/game_repository.dart';
 import 'package:levelup_fis/domain/models/curriculum.dart';
 import 'package:levelup_fis/domain/providers/auth_provider.dart';
+import 'package:levelup_fis/domain/providers/curriculo_provider.dart';
 import 'package:levelup_fis/domain/providers/topic_content_provider.dart';
 import 'package:levelup_fis/domain/providers/user_provider.dart';
 
@@ -53,8 +54,8 @@ final topicProgressProvider =
 ///      (topic_content.nivel_minimo, configurável pelo painel; se o
 ///      admin nunca definiu isso, cai pro padrão fixo em
 ///      TopicoInfo.nivelMinimo — ver curriculum.dart).
-///   2. Sequência: o tópico anterior do mesmo módulo (na ordem de
-///      kCurriculo, só contando os já implementados) precisa ter
+///   2. Sequência: o tópico anterior do mesmo módulo (na ordem vinda de
+///      curriculoProvider, só contando os já implementados) precisa ter
 ///      `fixacao_concluida == true`.
 /// O primeiro capítulo implementado do módulo só precisa da condição 1
 /// (não há "anterior" pra exigir sequência).
@@ -69,7 +70,8 @@ final topicoDesbloqueadoProvider =
   TopicoInfo? topico;
   ModuloInfo? moduloDono;
 
-  for (final modulo in kCurriculo) {
+  final curriculo = await ref.watch(curriculoProvider.future);
+  for (final modulo in curriculo) {
     for (final t in modulo.topicos) {
       if (t.id == topicoId) {
         topico = t;

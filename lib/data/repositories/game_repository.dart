@@ -14,6 +14,7 @@
 // caminho opcional de Exercícios e da Prova final dentro do mesmo tópico.
 
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:levelup_fis/core/constants/app_constants.dart';
 import 'package:levelup_fis/data/models/question_model.dart';
@@ -21,6 +22,7 @@ import 'package:levelup_fis/data/models/progress_model.dart';
 import 'package:levelup_fis/data/models/exam_attempt_model.dart';
 import 'package:levelup_fis/data/models/user_model.dart';
 import 'package:levelup_fis/data/models/video_model.dart';
+import 'package:levelup_fis/data/models/curriculo_model.dart';
 
 class GameRepository {
   final String baseUrl = AppConstants.baseUrl;
@@ -180,6 +182,15 @@ class GameRepository {
     final response = await http.get(uri, headers: _authHeaders(accessToken));
 
     if (response.statusCode == 200) {
+      // DIAGNÓSTICO TEMPORÁRIO — mostra exatamente o que o backend
+      // devolveu, pra descobrir se o problema dos vídeos antigos é no
+      // servidor ou no app. debugPrint (não print) porque o Android
+      // corta linhas muito longas no logcat. Remover depois de
+      // identificar a causa.
+      debugPrint(
+        '[DEBUG getVideos] uri=$uri status=${response.statusCode} '
+        'body=${response.body}',
+      );
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((v) => VideoModel.fromJson(v)).toList();
     } else {
@@ -320,6 +331,26 @@ class GameRepository {
     } else {
       throw Exception(
         'Erro ao marcar resumo como concluído. status=${response.statusCode} body=${response.body}',
+      );
+    }
+  }
+
+  /// Currículo dinâmico (Fase 1): Áreas com seus Blocos aninhados, na
+  /// ordem definida pelo painel (ver sql/010_curriculo_dinamico.sql e
+  /// app/routes/curriculo.py). Substitui o kCurriculo hardcoded que
+  /// existia antes em curriculum.dart.
+  Future<List<AreaModel>> getCurriculo(String accessToken) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/curriculo/areas'),
+      headers: _authHeaders(accessToken),
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((a) => AreaModel.fromJson(a)).toList();
+    } else {
+      throw Exception(
+        'Erro ao buscar currículo. status=${response.statusCode} body=${response.body}',
       );
     }
   }

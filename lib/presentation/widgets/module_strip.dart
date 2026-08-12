@@ -11,9 +11,14 @@ import '../theme/app_colors.dart';
 /// de teste — ver `ModuloInfo.navegavel`) aparecem desbloqueados/clicáveis;
 /// os demais aparecem como roadmap, acinzentados.
 class ModuleStrip extends StatelessWidget {
+  final List<ModuloInfo> modulos;
   final ValueChanged<ModuloInfo> onModuleTap;
 
-  const ModuleStrip({super.key, required this.onModuleTap});
+  const ModuleStrip({
+    super.key,
+    required this.modulos,
+    required this.onModuleTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -22,10 +27,10 @@ class ModuleStrip extends StatelessWidget {
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: kCurriculo.length,
+        itemCount: modulos.length,
         itemBuilder: (context, index) {
-          final modulo = kCurriculo[index];
-          final isLast = index == kCurriculo.length - 1;
+          final modulo = modulos[index];
+          final isLast = index == modulos.length - 1;
           return Row(
             children: [
               _ModuleBadge(
@@ -62,7 +67,6 @@ class _ModuleBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = modulo.navegavel;
-    final iconColor = active ? AppColors.bg : AppColors.muted;
 
     return GestureDetector(
       onTap: onTap,
@@ -96,9 +100,13 @@ class _ModuleBadge extends StatelessWidget {
                   : null,
             ),
             child: Center(
-              child: modulo.customIconBuilder != null
-                  ? modulo.customIconBuilder!(iconColor, 22)
-                  : Icon(modulo.icon, color: iconColor, size: 22),
+              child: Opacity(
+              opacity: active ? 1 : 0.55,
+              child: Text(
+                modulo.emoji,
+                style: const TextStyle(fontSize: 22, height: 1),
+              ),
+            ),
             ),
           ),
           const SizedBox(height: 4),
