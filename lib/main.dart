@@ -32,7 +32,7 @@ class LevelUpFisApp extends ConsumerWidget {
     );
 
     return MaterialApp.router(
-      title: 'LevelUp Fís',
+      title: 'LUP App',
       debugShowCheckedModeBanner: false,
       routerConfig: router,
       theme: ThemeData(

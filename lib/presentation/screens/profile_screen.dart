@@ -129,7 +129,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         backgroundColor: AppColors.bg,
         elevation: 0,
         foregroundColor: AppColors.cream,
-        title: const Text('Perfil', style: TextStyle(color: AppColors.cream)),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(
+              'assets/images/logo.png',
+              width: 28,
+              height: 28,
+            ),
+            const SizedBox(width: 10),
+            const Text('Perfil', style: TextStyle(color: AppColors.cream)),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout_rounded, color: AppColors.muted),

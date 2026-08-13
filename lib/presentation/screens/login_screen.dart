@@ -210,10 +210,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(
-                    Icons.bolt_rounded,
-                    size: 72,
-                    color: AppColors.gold,
+                  Center(
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      width: 96,
+                      height: 96,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   const Text(

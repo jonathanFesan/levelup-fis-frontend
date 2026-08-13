@@ -118,6 +118,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  Center(
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      width: 72,
+                      height: 72,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   const Text(
                     'Comece sua jornada',
                     style: TextStyle(
